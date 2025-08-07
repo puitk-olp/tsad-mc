@@ -1,0 +1,47 @@
+#! /usr/bin/bash
+
+LOCAL_DIR=/mnt/FFL/code/fred/docker
+
+CONFIG_FILE=$1
+
+CPU_LIMIT=`sed -n 's/^docker_cpu_limit:\(.*\)/\1/p' < ${CONFIG_FILE}`
+RAM_LIMIT=`sed -n 's/^docker_ram_limit:\(.*\)/\1/p' < ${CONFIG_FILE}`
+SWAP_LIMIT=`sed -n 's/^docker_swap_limit:\(.*\)/\1/p' < ${CONFIG_FILE}`
+TIME_LIMIT=`sed -n 's/^docker_time_limit:\(.*\)/\1/p' < ${CONFIG_FILE}`
+
+COMMAND="docker run -v /vol/FFL:/mnt/FFL "
+EMPTY=''
+
+if [ "$CPU_LIMIT" == "$EMPTY" ]
+then
+CPU=''
+else
+CPU="--cpu=${CPU_LIMIT}"
+fi
+
+if [ "$RAM_LIMIT" == "$EMPTY" ]
+then
+RAM=''
+else
+RAM="-m ${RAM_LIMIT}"
+fi
+
+if [ "$SWAP_LIMIT" == "$EMPTY" ]
+then
+SWAP=''
+else
+SWAP="--cpu=${TIME_LIMIT}"
+fi
+
+if [ "$TIME_LIMIT" == "$EMPTY" ]
+then
+TIME=''
+else
+TIME="--cpu=$TIME_LIMIT"
+fi
+
+
+COMMAND_END="tsbad:0.0.2 python ${LOCAL_DIR}/Unit_Pipeline.py --config ${LOCAL_DIR}/${CONFIG_FILE}"
+
+com="${COMMAND} ${CPU} ${RAM} ${SWAP} ${TIME} ${COMMAND_END}"
+$com

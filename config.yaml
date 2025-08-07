@@ -1,0 +1,39 @@
+comment: "Just a test"
+
+user: fred
+
+host: generic
+
+db: 
+  file: /mnt/FFL/code/fred/docker/results/results_db.db
+  name: expe
+
+docker_image: tsbad:0.0.2
+
+#docker_cpu_limit: "0.1"
+
+##ram limit 200m for 200MB, 1g for 1GB etc..
+docker_ram_limit: 200m
+
+#docker_swap_limit: 500MB
+
+#docker_time_limit: 1h
+
+
+method: 
+  name: FFT
+    #  parameters: 
+    #  slidingWindow: 1 
+    #  n_neighbors: 30
+    #  metric:  minkowski 
+    #  n_jobs:  1
+
+dataset:
+  dir:     /mnt/FFL/datasets/TSB-AD-U
+  summary: /mnt/FFL/code/fred/Summary.csv
+  data: 001_NAB_id_1_Facility_tr_1007_1st_2014
+  
+metrics:
+  name: all
+  parameters: ''
+
