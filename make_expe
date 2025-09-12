@@ -1,6 +1,8 @@
 #! /usr/bin/bash
 
-LOCAL_DIR=/mnt/FFL/code/fred/docker
+LOCAL_DIR=/vol/FFL/code/pablo
+
+DOCKER_IMAGE="tsbad:0.0.3-cpu-pablo"
 
 CONFIG_FILE=$1
 
@@ -9,7 +11,7 @@ RAM_LIMIT=`sed -n 's/^docker_ram_limit:\(.*\)/\1/p' < ${CONFIG_FILE}`
 SWAP_LIMIT=`sed -n 's/^docker_swap_limit:\(.*\)/\1/p' < ${CONFIG_FILE}`
 TIME_LIMIT=`sed -n 's/^docker_time_limit:\(.*\)/\1/p' < ${CONFIG_FILE}`
 
-COMMAND="docker run -v /vol/FFL:/mnt/FFL "
+COMMAND="docker run --rm -v /vol/FFL:/vol/FFL "
 EMPTY=''
 
 if [ "$CPU_LIMIT" == "$EMPTY" ]
@@ -30,18 +32,18 @@ if [ "$SWAP_LIMIT" == "$EMPTY" ]
 then
 SWAP=''
 else
-SWAP="--cpu=${TIME_LIMIT}"
+SWAP="--memory-swap=${SWAP_LIMIT}"
 fi
 
 if [ "$TIME_LIMIT" == "$EMPTY" ]
 then
 TIME=''
 else
-TIME="--cpu=$TIME_LIMIT"
+TIME="--stop-timeout=$TIME_LIMIT"
 fi
 
 
-COMMAND_END="tsbad:0.0.2 python ${LOCAL_DIR}/Unit_Pipeline.py --config ${LOCAL_DIR}/${CONFIG_FILE}"
+COMMAND_END="${DOCKER_IMAGE} python ${LOCAL_DIR}/Unit_Pipeline.py --config ${LOCAL_DIR}/${CONFIG_FILE}"
 
 com="${COMMAND} ${CPU} ${RAM} ${SWAP} ${TIME} ${COMMAND_END}"
 $com

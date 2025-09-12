@@ -1,12 +1,10 @@
 # Docker file for TSB-AD usage
-FROM python:3.12.4
+FROM python:3.12-slim
+LABEL Maintainer="pablo"
 
-LABEL Maintainer="fred"
+RUN pip install --no-cache --extra-index-url https://download.pytorch.org/whl/cpu TSB-AD
 
-WORKDIR = /home/guyarfre
+VOLUME /vol/FFL
+WORKDIR /vol/FFL
 
-VOLUME /mnt/FFL
-
-RUN pip install TSB-AD
-
-CMD [ "bash"]
+CMD [ "/bin/bash" ]

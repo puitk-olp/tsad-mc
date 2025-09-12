@@ -5,8 +5,8 @@ import json
 import yaml
 import subprocess
 
-LOCAL_DIR = '/mnt/FFL/code/fred/docker'
-COMMAND   = ['docker','run','-v','/vol/FFL:/mnt/FFL']
+LOCAL_DIR = '/app/FFL/code/pablo'
+COMMAND   = ['docker','run','--rm', '-v','/vol/FFL:/app/FFL']
 
 
 def make_docker_command(**params):

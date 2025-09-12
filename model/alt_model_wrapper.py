@@ -11,23 +11,24 @@ Unsupervised = ['FFT', 'SR', 'NORMA', 'Series2Graph', 'Sub_IForest', 'IForest', 
 Semisupervised = ['Left_STAMPi', 'SAND', 'MCD', 'Sub_MCD', 'OCSVM', 'Sub_OCSVM', 'AutoEncoder', 'CNN', 'LSTMAD', 'TranAD', 'USAD', 'OmniAnomaly', 
                         'AnomalyTransformer', 'TimesNet', 'FITS', 'Donut', 'OFA', 'MOMENT_FT', 'M2N2']
 
-
 Metrics = ['AUC-PR','AUC-ROC','VUS-PR','VUS-ROC','Standard-F1','PA-F1','Event-based-F1','R-based-F1','Affiliation-F']
-Empty_Perf = {'AUC-PR':None,
-              'AUC-ROC':None,
-              'VUS-PR':None,
-              'VUS-ROC':None,
-              'Standard-F1': None,
-              'PA-F1': None,
-              'Event-based-F1': None,
-              'R-based-F1': None,
-              'Affiliation-F':None}
-Unsupervise_AD_Pool = ['FFT', 'SR', 'NORMA', 'Series2Graph', 'Sub_IForest', 'IForest', 'LOF', 'Sub_LOF', 'POLY', 'MatrixProfile', 'Sub_PCA', 'PCA', 'HBOS', 
-                        'Sub_HBOS', 'KNN', 'Sub_KNN','KMeansAD', 'KMeansAD_U', 'KShapeAD', 'COPOD', 'CBLOF', 'COF', 'EIF', 'RobustPCA', 'Lag_Llama', 'TimesFM', 'Chronos', 'MOMENT_ZS']
-Semisupervise_AD_Pool = ['Left_STAMPi', 'SAND', 'MCD', 'Sub_MCD', 'OCSVM', 'Sub_OCSVM', 'AutoEncoder', 'CNN', 'LSTMAD', 'TranAD', 'USAD', 'OmniAnomaly', 
-                        'AnomalyTransformer', 'TimesNet', 'FITS', 'Donut', 'OFA', 'MOMENT_FT', 'M2N2']
 
-def run_Unsupervise_AD(model_name, data,**kwargs):
+# Empty_Perf = {'AUC-PR':None,
+#               'AUC-ROC':None,
+#               'VUS-PR':None,
+#               'VUS-ROC':None,
+#               'Standard-F1': None,
+#               'PA-F1': None,
+#               'Event-based-F1': None,
+#               'R-based-F1': None,
+#               'Affiliation-F':None}
+
+# Unsupervise_AD_Pool = ['FFT', 'SR', 'NORMA', 'Series2Graph', 'Sub_IForest', 'IForest', 'LOF', 'Sub_LOF', 'POLY', 'MatrixProfile', 'Sub_PCA', 'PCA', 'HBOS', 
+#                         'Sub_HBOS', 'KNN', 'Sub_KNN','KMeansAD', 'KMeansAD_U', 'KShapeAD', 'COPOD', 'CBLOF', 'COF', 'EIF', 'RobustPCA', 'Lag_Llama', 'TimesFM', 'Chronos', 'MOMENT_ZS']
+# Semisupervise_AD_Pool = ['Left_STAMPi', 'SAND', 'MCD', 'Sub_MCD', 'OCSVM', 'Sub_OCSVM', 'AutoEncoder', 'CNN', 'LSTMAD', 'TranAD', 'USAD', 'OmniAnomaly', 
+#                         'AnomalyTransformer', 'TimesNet', 'FITS', 'Donut', 'OFA', 'MOMENT_FT', 'M2N2']
+
+def run_Unsupervise_AD(model_name, data, **kwargs):
     
     # Reinitialize the timers
     Timer.timers = {}
@@ -53,10 +54,8 @@ def run_Unsupervise_AD(model_name, data,**kwargs):
     except Exception as e:
         INIT_FAILED = True
         TEST_FAILED = True
-
     
     # Test
- 
     try:
         with Timer("test"):
             score = eval_function_to_call(clf,data)
@@ -65,20 +64,17 @@ def run_Unsupervise_AD(model_name, data,**kwargs):
     except Exception as e:
         TEST_FAILED = True
 
-    result = {'init'  : Timer.timers.get('init',float('NaN')),
-                'train' : Timer.timers.get('train',0.0),
-                'test'  : Timer.timers.get('test',float('NaN')),
-                'score' : score,
-                'status':status}
+    result = {
+        'init'  : float('NaN') if INIT_FAILED else Timer.timers.get('init',float('NaN')),
+        'train' : Timer.timers.get('train',0.0),
+        'test'  : float('NaN') if TEST_FAILED else Timer.timers.get('test',float('NaN')),
+        'score' : score,
+        'expe_status': status
+    }
     
-    if INIT_FAILED:
-        result['init'] = float('NaN')
-    if TEST_FAILED:
-        result['test'] = float('NaN')
-    
-    return(result)
+    return result
 
-def run_Semisupervise_AD(model_name, data_train, data_test,**kwargs):
+def run_Semisupervise_AD(model_name, data_train, data_test, **kwargs):
 
     # Reinitialize the timers
     Timer.timers = {}
@@ -128,20 +124,15 @@ def run_Semisupervise_AD(model_name, data_train, data_test,**kwargs):
         status = 'failed'
     
     # results formating
-    result = {'init'  : Timer.timers.get('init',float('NaN')),
-              'train' : Timer.timers.get('train',float('NaN')),
-              'test'  : Timer.timers.get('test',float('NaN')),
-              'score' : score,
-              'status': status}
-
-    if INIT_FAILED:
-        result['init'] = float('NaN')
-    if TRAIN_FAILED:
-        result['train'] = float('NaN')
-    if TEST_FAILED:
-        result['test'] = float('NaN')
+    result = {
+        'init'  : float('NaN') if INIT_FAILED else Timer.timers.get('init',float('NaN')),
+        'train' : float('NaN') if TRAIN_FAILED else Timer.timers.get('train',float('NaN')),
+        'test'  : float('NaN') if TEST_FAILED else Timer.timers.get('test',float('NaN')),
+        'score' : score,
+        'expe_status': status
+    }
     
-    return(result)
+    return result
 
 ## FFT
 

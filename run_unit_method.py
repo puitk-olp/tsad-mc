@@ -9,6 +9,7 @@ from local_utils.Logger import Logger
 from model.alt_model_wrapper import run_Unsupervise_AD, run_Semisupervise_AD
 from model.alt_model_wrapper import Unsupervised, Semisupervised
 
+
 # Parsing dictionnary
 class ParseKwargs(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -57,11 +58,19 @@ def read_config(config_file):
         }
         return(arguments)
 
-def run_method(method,train_data=None,test_data=None,labels=None,reduced_labels=None,**method_parameters):
+def run_method(
+        method: str,
+        train_data=None,
+        test_data=None,
+        labels=None,
+        reduced_labels=None,
+        **method_parameters
+    ):
     logger = Logger()
     logger.log('method',method)
-    if method in Unsupervised:
-        try:
+    
+    try:
+        if method in Unsupervised:
             result = run_Unsupervise_AD(method,data,**method_parameters)
             score = MinMaxScaler(feature_range=(0,1)).fit_transform(result['score'].reshape(-1,1)).ravel()
             init_duration     = result['init']
@@ -70,15 +79,7 @@ def run_method(method,train_data=None,test_data=None,labels=None,reduced_labels=
             status            = result['status']
             perf = get_metrics(result['score'],labels)
             score = score.tolist()
-        except:
-            score             = []
-            init_duration     = float('NaN')
-            training_duration = float('NaN')
-            test_duration     = float('NaN')
-            status            = 'failed'
-            perf = {}
-    else:  
-        try:
+        else:  
             result = run_Semisupervise_AD(method, train_data, test_data,**method_parameters)
             score = MinMaxScaler(feature_range=(0,1)).fit_transform(result['score'].reshape(-1,1)).ravel()
             init_duration     = result['init']
@@ -87,7 +88,7 @@ def run_method(method,train_data=None,test_data=None,labels=None,reduced_labels=
             status            = result['status']
             perf = get_metrics(result['score'],reduced_labels)
             score = score.tolist()
-        except:
+    except:
             score             = []
             init_duration     = float('NaN')
             training_duration = float('NaN')
@@ -100,7 +101,8 @@ def run_method(method,train_data=None,test_data=None,labels=None,reduced_labels=
     logger.log('test',test_duration)
     logger.log('performance',perf)
     logger.log('status',status)
-    return(logger._logs)
+
+    return (logger._logs)
 
 if __name__ == '__main__':
     ## ArgumentParser
