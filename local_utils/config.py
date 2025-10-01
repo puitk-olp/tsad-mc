@@ -1,11 +1,11 @@
 import os
-import sys
+# import sys
 import yaml
 import json
 import pickle
 import pandas as pd
 import itertools
-import defaults
+import local_utils.defaults as defaults
 
 def _get_ext(file_path: str) -> str:
     _, ext = os.path.splitext(file_path)
@@ -33,6 +33,9 @@ def read_file(input_file: str = defaults.CONFIG_FILE):
 
 def write_file(data: dict|str, output_file: str):
     try:
+        # make dirs
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        # choose proper file format writer
         ext = _get_ext(output_file).lower()
         mode = "w" + _get_mode(ext)
         with open(output_file, mode) as file:
@@ -43,7 +46,7 @@ def write_file(data: dict|str, output_file: str):
             elif ext in [ "pkl", "pickle" ]:
                 pickle.dump(data, file)
             else:
-                file.write(data)
+                file.write(str(data))
     except:
         raise IOError(f"Error during writing to '{output_file}' file")
 
@@ -52,8 +55,7 @@ def check_globals(config: dict):
     config["globals"].setdefault('comment',defaults.COMMENT)
     config["globals"].setdefault('user',os.getlogin())
     config["globals"].setdefault('hostname',os.uname().nodename)
-    # paths = config["globals"].setdefault('paths', {})
-
+    config["globals"].setdefault("temp_dir", f"{defaults.TEMP_DIR}")
 
 def examine_multi_config(multi_config: dict) -> list[dict]:
     # prepare config lists for permutations
@@ -61,8 +63,8 @@ def examine_multi_config(multi_config: dict) -> list[dict]:
     
     # examine limits
     limits = runner_config.setdefault("limits",{})
-    for l in [ "cpus", "mem_limit", "memswap_limit" ]:
-        limits.setdefault(l,[-1])
+    for l in [ "cpu", "memory", "swap" ]:
+        limits.setdefault(l,[None])
         if type(limits[l])!=list:
             limits[l] = [ limits[l] ]
     
@@ -99,7 +101,7 @@ def examine_multi_config(multi_config: dict) -> list[dict]:
         m_config["name"] = [ m_config.get("name") ]
 
     # permutations of: cpu, mem, memswap, timeout, dataset, method
-    config_to_permute = [ limits["cpus"], limits["mem_limit"], limits["memswap_limit"], timeout, ds_config["name"], m_config.get("name") ]
+    config_to_permute = [ limits["cpu"], limits["memory"], limits["swap"], timeout, ds_config["name"], m_config.get("name") ]
     config_permutations = itertools.product(*config_to_permute)
     unit_configs = []
 
@@ -121,14 +123,38 @@ def examine_multi_config(multi_config: dict) -> list[dict]:
             },
             "metrics": multi_config.get("metrics", defaults.METRICS_NAME)
         }
-        for l in [("cpus",cp[0]),("mem_limit",cp[1]),("memswap_limit",cp[2])]:
+        for l in [("cpu",cp[0]),("memory",cp[1]),("swap",cp[2])]:
             # print(f"examine limits: {l}")
-            if l[1] not in [-1, "None", None]:
+            if l[1] not in ["None", None]:
                 c["runner"].setdefault("limits",{})[l[0]] = l[1]
         
         unit_configs.append(c)
     
     return unit_configs
+
+
+BYTE_UNITS = [ "b", "k", "m", "g", "t" ]
+
+def hr2bytes(hr_str: str) -> int:
+    hr_str = hr_str.lower()
+    end = len(hr_str)
+    if hr_str[-1].isdigit():
+        unit = "b"
+    elif hr_str[-1] in BYTE_UNITS:
+        unit = hr_str[-1]
+        end -= 1
+    else:
+        raise ValueError(f"unknown byte value: {hr_str}")
+    value = float(hr_str[0:end])
+    value *= 1024**BYTE_UNITS.index(unit)
+    return int(value)    # in bytes
+
+def bytes2hr(value: int) -> str:
+    for i in range(len(BYTE_UNITS)):
+        if i < len(BYTE_UNITS)-1 and value > 1024**(i+1):
+            continue
+        value /= 1024**i
+        return f"{value:g}"+(BYTE_UNITS[i] if i > 0 else "")
 
 
 

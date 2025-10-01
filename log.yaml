@@ -8,21 +8,29 @@ handlers:
     class: logging.StreamHandler
     formatter: default
     stream: ext://sys.stdout
-    level: INFO
-  logfile:
-    class : logging.handlers.RotatingFileHandler
-    formatter: default
-    filename: logs/runner.log
-    maxBytes: 1024000
-    backupCount: 3
     level: DEBUG
+#   unit_logfile:
+#     class : logging.handlers.RotatingFileHandler
+#     formatter: default
+#     filename: logs/unit-pipeline.log
+#     maxBytes: 1024000
+#     backupCount: 3
+#     level: DEBUG
+#   runner_logfile:
+#     class : logging.handlers.RotatingFileHandler
+#     formatter: default
+#     filename: logs/runner.log
+#     maxBytes: 1024000
+#     backupCount: 3
+#     level: DEBUG
 loggers:
   unit_pipeline:
     level: DEBUG
-    # handlers: [console]
-    # propagate: no
+    # handlers: [ unit_logfile ]
+    # propagate: yes
   runner:
     level: DEBUG
+    # handlers: [ runner_logfile ]
 root:
-  level: DEBUG
-  handlers: [ console, logfile ]
+  level: INFO
+  handlers: [ console ]

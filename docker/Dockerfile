@@ -7,4 +7,7 @@ RUN pip install --no-cache --extra-index-url https://download.pytorch.org/whl/cp
 VOLUME /vol/FFL
 WORKDIR /vol/FFL
 
+ENV TZ=${TZ:-Europe/Warsaw}
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
 CMD [ "/bin/bash" ]

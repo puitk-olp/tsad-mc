@@ -3,7 +3,7 @@ import math
 from TSB_AD.utils.slidingWindows import find_length_rank
 from local_utils.Timer import Timer
 from local_utils.Logger import Logger
-
+import traceback
 
 Unsupervised = ['FFT', 'SR', 'NORMA', 'Series2Graph', 'Sub_IForest', 'IForest', 'LOF', 'Sub_LOF', 'POLY', 'MatrixProfile', 'Sub_PCA', 'PCA', 'HBOS', 
                         'Sub_HBOS', 'KNN', 'Sub_KNN','KMeansAD', 'KMeansAD_U', 'KShapeAD', 'COPOD', 'CBLOF', 'COF', 'EIF', 'RobustPCA', 'Lag_Llama', 'TimesFM', 'Chronos', 'MOMENT_ZS']
@@ -34,9 +34,10 @@ def run_Unsupervise_AD(model_name, data, **kwargs):
     Timer.timers = {}
 
     status = 'failed'
+    expe_fail_reason : str = ""
     INIT_FAILED = False
     TEST_FAILED = False
-    score  = {}
+    score  = np.ndarray(0)
 
     init_function_name = f'run_{model_name}_init'
     init_function_to_call = globals()[init_function_name]
@@ -54,6 +55,8 @@ def run_Unsupervise_AD(model_name, data, **kwargs):
     except Exception as e:
         INIT_FAILED = True
         TEST_FAILED = True
+        expe_fail_reason = repr(e)
+        print(traceback.format_exc())
     
     # Test
     try:
@@ -63,13 +66,17 @@ def run_Unsupervise_AD(model_name, data, **kwargs):
         
     except Exception as e:
         TEST_FAILED = True
+        expe_fail_reason = repr(e)
 
     result = {
         'init'  : float('NaN') if INIT_FAILED else Timer.timers.get('init',float('NaN')),
         'train' : Timer.timers.get('train',0.0),
         'test'  : float('NaN') if TEST_FAILED else Timer.timers.get('test',float('NaN')),
+        'no_train_points': 0,
+        'no_test_points': data.shape[0],
         'score' : score,
-        'expe_status': status
+        'expe_status': status,
+        'expe_fail_reason': expe_fail_reason,
     }
     
     return result
@@ -83,7 +90,7 @@ def run_Semisupervise_AD(model_name, data_train, data_test, **kwargs):
     INIT_FAILED  = False
     TRAIN_FAILED = False
     TEST_FAILED  = False
-    score  = {}
+    score  = np.ndarray(0)
 
     init_function_name = f'run_{model_name}_init'
     init_function_to_call = globals()[init_function_name]
@@ -128,6 +135,8 @@ def run_Semisupervise_AD(model_name, data_train, data_test, **kwargs):
         'init'  : float('NaN') if INIT_FAILED else Timer.timers.get('init',float('NaN')),
         'train' : float('NaN') if TRAIN_FAILED else Timer.timers.get('train',float('NaN')),
         'test'  : float('NaN') if TEST_FAILED else Timer.timers.get('test',float('NaN')),
+        "no_train_points": data_train.shape[0],
+        "no_test_points": data_test.shape[0],
         'score' : score,
         'expe_status': status
     }
@@ -190,7 +199,7 @@ def run_Sub_LOF_init(data, **parameters):
     from TSB_AD.models.LOF import LOF
     periodicity    =  int(parameters.get('periodicity',1))
     n_neighbors    =  int(parameters.get('n_neighbors',30)) 
-    metric         =  int(parameters.get('metric','minkowski')) 
+    metric         =  str(parameters.get('metric','minkowski')) 
     n_jobs         =  int(parameters.get('n_jobs',1))
 
     slidingWindow = find_length_rank(data, rank=periodicity)

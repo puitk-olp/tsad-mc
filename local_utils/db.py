@@ -1,14 +1,16 @@
+import os
 import sys
 import time
 import json
 import sqlite3
-import defaults
+import local_utils.defaults as defaults
 
 ## db records 
 DB_RECORD = [
     ('expe_id','TEXT PRIMARY KEY'),
     ('expe_start','TEXT'),
     ('expe_end','TEXT'),
+    ('runner_type','TEXT'),
     ('hostname','TEXT'),
     ('user','TEXT'),
     ('comment','TEXT'),
@@ -26,6 +28,10 @@ DB_RECORD = [
     ('metrics','TEXT'),
     # ('metrics_params','TEXT'),
     ('dataset','TEXT'),
+    ('dataset_file_size','INTEGER'),
+    ('dataset_memory_size','INTEGER'),
+    ('no_train_points','INTEGER'),
+    ('no_test_points','INTEGER'),
     ('init_duration','REAL'),
     ('train_duration','REAL'),
     ('test_duration','REAL'),
@@ -38,22 +44,25 @@ DB_RECORD = [
 #     return(json.loads(json_acceptable_string))
 
 
-
 class SqliteWrapper:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, logger = None):
         self._db_config = config
+        self._logger = logger
         self._db = None
 
+        self._check_config()
         self._open_db()
 
     def _check_config(self):
         self._db_config.setdefault("file", defaults.DB_FILE)
         self._db_config.setdefault("name", defaults.DB_NAME)
-        print(f"using sqlite3 db: file={self._db_config['file']}, name={self._db_config['name']}", file=sys.stderr)
+        if self._logger is not None:
+            self._logger.debug(f"using sqlite3 db: file={self._db_config['file']}, name={self._db_config['name']}")
 
     def _open_db(self):
         try:
             if self._db is None or len(self._db)==0:
+                os.makedirs(os.path.dirname(self._db_config["file"]), exist_ok=True)
                 self._db = {}
                 self._db["connection"] = sqlite3.connect(self._db_config["file"])
                 self._db["cursor"] = self._db["connection"].cursor()
@@ -62,7 +71,8 @@ class SqliteWrapper:
                 self._db["cursor"].execute(request)
         except:
             # raise Exception("db has not been created")
-            print("Error while opening database: results will not be stored in DB !!!", file=sys.stderr)
+            if self._logger is not None:
+                self._logger.warning("Error while opening database: results will not be stored in DB !!!")
             self._db = None
 
     def save_results(self, config: dict, status: dict, results: dict):
@@ -74,29 +84,35 @@ class SqliteWrapper:
         try:
             columns = "({})".format(','.join(DB_RECORD[i][0] for i in range(len(DB_RECORD))))
             globals = config.get("globals", {})
-            limits = config.get("runner",{}).get("limits", {})
+            runner = config.get("runner",{})
+            limits = runner.get("limits", {})
 
             row = [
                 str(config["unit_test"].get("id")),
                 time.strftime(defaults.TIME_FORMAT,time.localtime(status.get("st"))),
                 time.strftime(defaults.TIME_FORMAT,time.localtime(status.get("et"))),
+                runner.get("type", ""),
                 globals.get("hostname"),
                 globals.get("user"),
                 globals.get("comment"),
                 self._db_config.get("file"),
                 self._db_config.get("name"),
                 status.get("StatusCode"),
-                limits.get('cpus',''),
-                limits.get('mem_limit',''),
-                limits.get('memswap_limit',''),
+                limits.get('cpu',''),
+                limits.get('memory',''),
+                limits.get('swap',''),
                 config["runner"].get('timeout',0),
                 results.get('expe_status', "failed"),
                 status.get('expe_fail_reason', results.get('expe_fail_reason','')),
                 config["method"]["name"],
                 json.dumps(config["method"].get("parameters",{})),
-                config["metrics"],
+                json.dumps(config["metrics"]),
                 # json.dumps(self._config["metrics"].get("parameters",{})),
                 config["dataset"]["name"],
+                results.get('dataset_file_size', -1),
+                results.get('dataset_memory_size', -1),
+                results.get('no_train_points', 0),
+                results.get('no_test_points', 0),
                 str(results.get('init', float('NaN'))),
                 str(results.get('train', float('NaN'))),
                 str(results.get('test', float('NaN'))),

@@ -1,0 +1,6 @@
+pyyaml
+docker
+psutil
+watchdog
+requests
+pandas

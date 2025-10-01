@@ -1,0 +1,66 @@
+globals:
+  comment: "Multitest"
+  # user: pablo           # if ommited, username from OS is taken
+  # hostname: generic     # if ommited, hostname from OS is taken
+
+  db: 
+    file: results/results-v9.db     # path for sqlite db file (result store). if it starts with '/', path is absolute, otherwise relative to current working dir (os.getcwd()).
+    name: expe                      # name of the table to store results
+
+  # (optional) it is not mandatory to set those paths!
+  # temp_dir: temp/   # (optional) dir to store temp data: runner.pid, temp config, temp results files. default value: os.getcwd()/temp
+
+runner:
+  type: docker               # type of a runner. currently implemented: docker, systemd
+  params:
+    image: tsbad:0.0.5-cpu    # image for docker runner
+    # name: dazzling_bassi    # (optional) name or short_id of the container to be reused, it will be removed at the end of test serie
+    # command:                # (optional) command to be run in a runner
+    # auto_remove: False
+  limits:
+    # limit args. they will be adjusted to fulfill Runner requirements.
+    # cpus: 1
+    memory : [ "750m", "1g", "2g" ]     # it stands for memory only limit
+    swap : [ "0m" ]         # it stands for swap only limit
+  timeout: 0
+
+##### For single test #####
+# this section is added automatically. do not add it by hand!!!
+# unit_test:
+#   id: 000-000-000-000
+#   result_file: results/000-000-000-000.yaml
+#   # save_config: True
+
+# dataset
+dataset:
+  # (optional) dir where datasets are stored. default value: /vol/FFL/datasets/TSB-AD-U
+  # dir: /vol/FFL/datasets/TSB-AD-U
+  # (optional): summary file used for dataset filtering. default value: /vol/FFL/datasets/TSB-AD-U/Summary.csv
+  # summary: /vol/FFL/datasets/TSB-AD-U/Summary.csv
+  # name/index/group/re - keys to select datasets for testing. one of them has to be configured (may be all). 
+  # name: 001_NAB_id_1_Facility_tr_1007_1st_2014
+  # datasets: small (~5k points), medium (~55k), large (~650k)
+  # index: [ 286, 331, 170 ]
+  index: [ 286, 331 ]
+  # index: [ 9, 149, 169, 170, 285, 313, 330, 332, 336, 356, 387 ]
+  # group: [ WSD, NAB ]
+  # re: "filter: "^010_|^150_|^170_|^171_|^286_|^314_|^331_|^333_|^337_|^357_|^388_""
+
+# TSAD method
+method:
+  # methods selected for testing
+  # name: [ NORMA, Series2Graph, MCD, Sub_MCD ]
+  name: [ NORMA, Series2Graph, MCD, Sub_MCD ]
+    #  parameters: 
+    #  slidingWindow: 1 
+    #  n_neighbors: 30
+    #  metric:  minkowski 
+    #  n_jobs:  1
+
+# metrics used for test. possible values: 'all', 'AUC-PR','AUC-ROC','VUS-PR','VUS-ROC','Standard-F1','PA-F1','Event-based-F1','R-based-F1','Affiliation-F'
+# + special value: none -> do not calculate metrics at all, store only 'score'
+metrics: none
+# [ 'Standard-F1', 'AUC-PR' ]
+  # PP: I drop metrics name and params, as it is not possible to pass params, so only keeping names straight under "metrics" key
+  # name: all
+  # parameters: ''
