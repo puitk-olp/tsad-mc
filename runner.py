@@ -11,6 +11,8 @@ import requests
 from local_utils.config import read_file, write_file, examine_multi_config, check_globals, hr2bytes, bytes2hr
 from local_utils.db import SqliteWrapper
 from local_utils.watcher import ResultWatchdog
+from local_utils.status import SerieStatus
+from local_utils.cgroups import CGroupsMonitor
 
 import uuid
 import time
@@ -18,6 +20,8 @@ import yaml
 import docker
 import psutil
 import signal
+import threading
+import pandas as pd
 
 logger = logging.getLogger("runner")
 
@@ -31,6 +35,7 @@ class Runner:
         self._params = runner_config.get("params",{})
         self._limits = runner_config.get("limits", {})
         self._timeout = float(runner_config.get("timeout", 0))
+        self._monitoring = { "enabled": runner_config.get("monitor",False) }
         self._params["command"] = defaults.get_unit_cmd(script_dir=SCRIPT_DIR, config_file=config_file)
 
     def _process_limits(self):
@@ -127,6 +132,15 @@ class DockerRunner(Runner):
             logger.debug(f"running container: {self._run_args}")
             # self._container.start()
             self._container = self._client.containers.run(**self._run_args)
+
+            if self._monitoring.get("enabled", False):
+                top = self._container.top()
+                pid_idx = top.get("Titles").index("PID")
+                pid = top.get("Processes")[0][pid_idx]  # we get first process
+                logger.debug(f"starting monitoring thread")
+                self._monitoring["ctrl"] = CGroupsMonitor(pid)
+                self._monitoring["ctrl"].start()
+
             wait_args = {}
             if self._timeout > 0:
                 wait_args["timeout"] = self._timeout
@@ -142,11 +156,20 @@ class DockerRunner(Runner):
             logger.info("waiting for the container to terminate, after sending SIGALRM")
             status = self._container.wait()
             logger.debug(f"container terminated")
+        finally:
+            if self._monitoring.get("ctrl") is not None:
+                logger.debug(f"waiting for monitoring thread to finish")
+                self._monitoring.get("ctrl").stop()
+
         # dict: it should contain at least {'StatusCode': int }
         if clean and not self._run_args.get('auto_remove', False):
             # final cleaning
             logger.info(f"removing container: {self._container.name}")
             # self._container.remove()
+
+        # rewrite monitor data
+        if self._monitoring.get("ctrl") is not None:
+            status["monitoring_data"] = self._monitoring.get("ctrl").get_values()
 
         return status
     
@@ -195,6 +218,16 @@ class SystemdRunner(Runner):
             exec_cmd = self._prepare_cmd()
             logger.debug(f"starting subprocess: {exec_cmd}")
             self._process = psutil.Popen(exec_cmd)
+
+            # start monitoring thread if requested
+            if self._monitoring.get("enabled", False):
+                logger.debug(f"starting monitoring thread")
+                # self._monitoring["alive"] = True
+                # self._monitoring["thread"] = threading.Thread(target=self.monitor)
+                # self._monitoring["thread"].start()
+                self._monitoring["ctrl"] = CGroupsMonitor(self._process.pid)
+                self._monitoring["ctrl"].start()
+            
             wait_args = {}
             if self._timeout > 0:
                 wait_args["timeout"] = self._timeout
@@ -207,9 +240,40 @@ class SystemdRunner(Runner):
             logger.info("waiting for the subprocess to terminate, after sending SIGALRM")
             status_code = self._process.wait()
             logger.debug(f"subprocess terminated: {int(status_code)}")
+            # self._monitoring["alive"] = False
+        finally:
+            if self._monitoring.get("ctrl") is not None:
+                logger.debug(f"waiting for monitoring thread to finish")
+                self._monitoring.get("ctrl").stop()
+
         # dict: it should contain at least {'StatusCode': int }
         status = {'StatusCode': int(status_code) }
+        # rewrite monitor data
+        if self._monitoring.get("ctrl") is not None:
+            status["monitoring_data"] = self._monitoring.get("ctrl").get_values()
         return status
+    
+    # def monitor(self):
+    #     # feat_to_monitor = [ "rss", "uss", "pss", "swap" ]
+    #     feat_to_monitor = [ "rss", "vms", "shared", "text", "lib", "data", "dirty", "uss", "pss", "swap"]
+    #     data = { }
+    #     try:
+    #         while self._monitoring.get("alive", False):
+    #             meminfo = self._process.memory_full_info()
+    #             cpu_percent = self._process.cpu_percent(interval=None)
+    #             logger.debug(f"{meminfo=}, {cpu_percent=}")
+    #             for f in feat_to_monitor:
+    #                 if hasattr(meminfo, f) and getattr(meminfo, f) > data.get(f,-1):
+    #                     data[f] = getattr(meminfo, f)
+    #             if cpu_percent > data.get("cpu",0):
+    #                 data["cpu"] = cpu_percent
+    #             time.sleep(1)
+    #     except psutil.NoSuchProcess as e:
+    #         logger.debug("no process to monitor - probably ended")
+    #     for f in feat_to_monitor:
+    #         if f in data:
+    #             data[f] /= (1024 * 1024)
+    #     self._monitoring["data"] = data
 
     def completed(self):
         logger.debug(f"calling runner due to worker job completion")
@@ -252,13 +316,15 @@ def run(config: dict, save: bool = True, clean: bool = False):
     # get unit test basic config
     temp_dir = config["globals"].get("temp_dir")
     logger.info(f"generating unit_config:")
-    config["unit_test"] = get_unit_test(temp_dir=temp_dir)
-    logger.debug(f"\n{yaml.dump(config)}")
+    unit_header = get_unit_test(temp_dir=temp_dir)
 
     # write config necessary for unit test to temp config file
-    unit_config = { k: config[k] for k in [ "unit_test", "dataset", "method", "metrics" ] }
-    temp_config_file = config['unit_test'].get("config_file")
-    logger.debug(f"saving unit_config (id={unit_config['unit_test'].get('id')}) file for runner: {temp_config_file}")
+    unit_config = { k: config[k] for k in [ "dataset", "method", "metrics" ] }
+    unit_config["unit_test"] = unit_header
+    logger.debug(f"\n{yaml.dump(unit_config)}")
+
+    temp_config_file = unit_header.get("config_file")
+    logger.debug(f"saving unit_config (id={unit_header.get('id')}) file for runner: {temp_config_file}")
     write_file(unit_config, temp_config_file)
 
     # record start time of a run()
@@ -269,11 +335,11 @@ def run(config: dict, save: bool = True, clean: bool = False):
         logger.info(f"configuring runner")
         RUNNER = get_runner(runner_config=config.get("runner",{}), config_file=temp_config_file)
         # get and start a watchdog for result file, in order to recognize moment for finished computation of Unit_Pipeline
-        logger.debug(f"preparing and starting result file watchdog: {config['unit_test'].get('result_file')}")
-        watchdog = ResultWatchdog(config['unit_test'].get('result_file'), RUNNER)
+        logger.debug(f"preparing and starting result file watchdog: {unit_header.get('result_file')}")
+        watchdog = ResultWatchdog(unit_header.get('result_file'), RUNNER)
         watchdog.start()
         # perform run() with chosen runner
-        logger.info(f"performing run: {config['unit_test'].get('id')}")
+        logger.info(f"performing run: {unit_header.get('id')}")
         status = RUNNER.run(clean=clean)
         RUNNER = None
         # release watchdog
@@ -296,20 +362,28 @@ def run(config: dict, save: bool = True, clean: bool = False):
         logger.debug(f"saving results to sqlite db: {db.get('file')} ({db.get('name')})")
         try:
             results = {}        # we don't know if we'll succeed
-            if os.path.isfile(config["unit_test"].get("result_file")):
-                results = read_file(config["unit_test"].get("result_file")).get("results")
-                
-                logger.debug(f'removing temp config ({config["unit_test"].get("config_file")}) and result ({config["unit_test"].get("result_file")}) files.')
-                os.remove(config["unit_test"].get("config_file"))
-                os.remove(config["unit_test"].get("result_file"))
+            if os.path.isfile(unit_header.get("result_file")):
+                results = read_file(unit_header.get("result_file")).get("results")
             # get dataset file size
-            ds_file = f'{config["dataset"].get("dir")}/{config["dataset"].get("name")}.csv'
+            ds_file = f'{unit_config["dataset"].get("dir")}/{unit_config["dataset"].get("name")}.csv'
             results["dataset_file_size"] = os.path.getsize(ds_file)
-        except:
-            logger.warning(f"cannot process results file: {config['unit_test'].get('result_file')}")
-            status.setdefault("expe_fail_reason", "cannot process result file")
+        except Exception as e:
+            logger.warning(f"cannot process results file: {unit_header.get('result_file')}")
+            status.setdefault("expe_fail_reason", f"cannot process result file: {repr(e)}")
+        finally:
+            # cleanup after unit test
+            logger.debug(f'removing temp config ({unit_header.get("config_file")}) and result ({unit_header.get("result_file")}) files.')
+            try:
+                os.remove(unit_header.get("config_file"))
+            except FileNotFoundError as e:
+                logger.warning(f'config file to remove not found: {unit_header.get("config_file")}')
+            try:
+                os.remove(unit_header.get("result_file"))
+            except FileNotFoundError as e:
+                logger.warning(f'result file to remove not found: {unit_header.get("result_file")}')
+    
         writer = SqliteWrapper(db, logger)
-        writer.save_results(config, status, results)
+        writer.save_results(unit_header.get("id"), config, status, results)
 
     # return stats higher
     status.setdefault("expe_status", results.get("expe_status", "failed"))
@@ -327,7 +401,6 @@ def signal_handler(signum, frame):
         logger.debug(f"RUNNER: {RUNNER is not None}")
         if RUNNER is not None:
             RUNNER.completed()
-
 
 if __name__ == '__main__':
     # registering our own signal handler function
@@ -349,11 +422,16 @@ if __name__ == '__main__':
         default=os.environ.get("CONFIG_FILE", defaults.CONFIG_FILE)
     )
     parser.add_argument('-l','--log-config-file', type=str, default=f"{SCRIPT_DIR}/{defaults.LOG_CONFIG_FILE}")
-    # parser.add_argument('-p','--pid-file', type=str, default=f"{defaults.RUNNER_PID_FILE}")
+    parser.add_argument('-n','--n-loops', help="repeat set of configs N-times", type=int, default=1)
+    parser.add_argument('-m','--run-mode', help="mode of runner", type=str, choices=["normal","finder","finder2"], default="normal")
+    parser.add_argument('-s','--status-file', help="file where runner puts status of test serie", type=str, default=None)
+    parser.add_argument('-d','--dns-failed', help="do not start next expe in loop when previous one failed", action="store_true")
     args = parser.parse_args()
 
+    n_loops = args.n_loops if args.n_loops >= 1 else 1
     # write runner process PID to file
     # write_file(os.getpid(), args.pid_file)
+       
 
     try:
         log_config = read_file(input_file=args.log_config_file)
@@ -367,17 +445,154 @@ if __name__ == '__main__':
     config = read_file(input_file=args.config_file)
     check_globals(config)
 
-    multi_config = examine_multi_config(config)
-    logger.info(f"Detected {len(multi_config)} configs")
+    multi_config, no_failed_configs = examine_multi_config(config, run_mode=args.run_mode)
+    logger.info(f"Detected {len(multi_config)} valid configs, {no_failed_configs} failed one(s).")
+    
+    serie_status = SerieStatus(args.status_file)
+    finder_report_list = []
+    
     # here we will have a loop of multiple tests
-    for i, rolling_config in enumerate(multi_config):
+    len_multi_config = len(multi_config)
+    for c_idx, rolling_config in enumerate(multi_config):
         logger.debug(f"#################################################")
-        logger.info(f"performing unit test {i+1}/{len(multi_config)}:")
-        # call run() - main mgmt function for unit_test run
-        # if last call -> clean=True
-        status = run(config=rolling_config, clean=((i+1)==len(multi_config)) )
-        logger.info(f"unit test status: {status}")
 
+        temp_run_mode = args.run_mode
+        temp_loop = True
+
+        temp_finder_report = {
+            "method": rolling_config['method'].get('name'),
+            "dataset": rolling_config['dataset'].get('name'),
+            "hostname": config["globals"].get("hostname"),
+            "runner_type": rolling_config["runner"].get("type"),
+            "mem_min": "FAILED,"
+        }
+
+        # we introduce control for looping test for the same config
+        while temp_loop:
+            temp_loop = False       # if explicitly set by others, it will be performed once more    
+        
+            if temp_run_mode == "normal":
+                for l_idx in range(n_loops):
+                    logger.debug(f"==================================================")
+                    logger.info(f"performing unit test {c_idx+1}/{len_multi_config}: iteration {l_idx+1}/{n_loops}")
+                    # if last call -> clean=True
+                    status = run(config=rolling_config, clean=((c_idx+1)==len_multi_config and (l_idx+1)==n_loops) )
+                    logger.info(f"unit test status: {status}")
+                    serie_status.report_test(status, rolling_config)
+                    # chcek, if we continue at expe_status='failed'
+                    if status.get("expe_status") == "failed" and args.dns_failed:
+                        n_dns = n_loops - l_idx - 1
+                        if n_dns > 0:
+                            logger.warning(f"we ommit remaining {n_dns}/{n_loops} iterations, due to failed expe in {l_idx+1} iteration")
+                            serie_status.report_dns_tests(n_dns, n_loops, rolling_config)
+                            break
+            elif temp_run_mode == "finder":
+                # finder based on limiting the process and checking if it fails or succeeds
+                logger.debug(f"==================================================")
+                logger.info(f"finding memory limit for config {c_idx+1}/{len_multi_config}: method={rolling_config['method'].get('name')}, dataset={rolling_config['dataset'].get('name')}")
+                # find memory limit for the method. we operate in MB
+                sys_phy_memory = psutil.virtual_memory().total/1024**2
+                min_mem = 0
+                diff_min = 1
+                max_mem = None
+                limits = rolling_config["runner"].get("limits")
+                cur_mem = 100
+                f_idx = 0
+                while True:
+                    if cur_mem > sys_phy_memory:    # we exceeded physical memory of the machine
+                        logger.warning(f"finder: physical memory of the machine exceeded")
+                        break
+                    f_idx += 1
+                    limits["memory"] = f"{cur_mem}m"
+                    status = run(config=rolling_config, clean=False )
+                    # logger.info(f"unit test status: {status}")
+                    serie_status.report_test(status, rolling_config)
+                    logger.info(f"finder (config {c_idx+1}/{len_multi_config}): iteration {f_idx} ({cur_mem}m): {status.get('expe_status')}")
+                    prev_mem = cur_mem
+                    if status.get("expe_status") == "success":
+                        max_mem = prev_mem
+                    else:   # expe failed                    
+                        min_mem = prev_mem
+                    # memory limit for next iteration
+                    cur_mem = prev_mem * 2 if max_mem is None else (min_mem+max_mem)/2
+                    # examine difference between max_mem and min_mem, and if lower than 1MB, end iteration
+                    diff_mem = min_mem if max_mem is None else max_mem - min_mem
+                    if diff_mem <= diff_min:
+                        max_mem = round( max_mem + 0.5)
+                        logger.info(f"found minimum memory limit for method={rolling_config['method'].get('name')} and dataset={rolling_config['dataset'].get('name')}: {max_mem}m (rounded up)")
+                        temp_finder_report["mem_min"] = max_mem
+                        break
+                    if f_idx >= 20:
+                        logger.warning(f"finder: maximum number of iteration ({f_idx}) reached")
+                        break
+                # should we store finder results ???
+                finder_db_file = config["globals"].get("finder_db", None)
+                if finder_db_file not in [ None, "" ]:
+                    try:
+                        logger.debug(f"trying to store finder report in: {finder_db_file}")
+                        temp_df = pd.DataFrame.from_records( [ temp_finder_report ] )
+                        finder_db_exists = os.path.isfile(finder_db_file) and os.path.getsize(finder_db_file)!=0
+                        temp_df.to_csv(finder_db_file, sep=';', mode='a', index=False, header=(not finder_db_exists))
+                        logger.info(f"finder report written to: {finder_db_file}")
+                    except:
+                        logger.warning(f"error while writing finder report to: {finder_db_file}")
+                # write_file(f"{str(temp_finder_report)}\n", f"{defaults.RESULT_DIR}/finder-report.txt", append=True)
+                finder_report_list.append(temp_finder_report)
+            elif temp_run_mode == "finder2":
+                logger.debug(f"==================================================")
+                # finder algorithm based on cgroups monitoring
+                logger.info(f"finding memory limit for config {c_idx+1}/{len_multi_config}: method={rolling_config['method'].get('name')}, dataset={rolling_config['dataset'].get('name')}")
+                # do not set memory limit, switch on monitor
+                rolling_config["runner"]["monitor"] = True
+                rolling_config["runner"]["limits"]["memory"] = None
+                max_memory_usage = []
+                
+                for l_idx in range(n_loops):
+                    status = run(config=rolling_config, clean=False )
+                    # logger.info(f"unit test status: {status}")
+                    serie_status.report_test(status, rolling_config)
+                    l_mem_usage = status.get("monitoring_data").get("memory.current") / 1024**2
+                    max_memory_usage.append(l_mem_usage)
+                    logger.info(f"finder2 (config: {c_idx+1}/{len_multi_config}): iteration {l_idx+1}/{n_loops}: {status.get('expe_status')}, max_mem_usage={l_mem_usage}m")
+                
+                temp_mem_min = round(max(max_memory_usage)+0.5)
+                temp_finder_report["mem_min"] = temp_mem_min
+                temp_finder_report["mem_usage_iter"] = max_memory_usage
+                finder_report_list.append(temp_finder_report)
+
+                # now, let's decide if we temporairly switch to "normal" mode for testing found mem_min
+                logger.debug(f"switching temporairly to 'normal' run-mode for testing found limit: {temp_mem_min}M")
+                rolling_config["runner"]["monitor"] = False
+                rolling_config["runner"]["limits"]["memory"] = f"{temp_mem_min}m"
+                temp_run_mode = "normal"
+                temp_loop = True
+            else:
+                logger.warning(f"unknown run-mode: {temp_run_mode}")
+        # end temporal looping
+    # end config iteration
+
+
+    logger.debug(f"#################################################")
+    logger.info(f"test serie has been completed !")
+    serie_status_dict = serie_status.get_status()
+    logger.info(f"no of unit tests: completed={serie_status_dict.get('completed_tests')}, process_ok={serie_status_dict.get('process_ok')}, expe_ok={serie_status_dict.get('expe_ok')}")
+
+    # if args.run_mode in [ "finder", "finder2" ]:
+    if len(finder_report_list) > 0:
+        logger.info(f"FINDER REPORT:")
+        for r in finder_report_list:
+            logger.info(r)
+    # elif args.run_mode == "normal":
+    # did not started tests report
+    if len(serie_status_dict.get("dns_tests")) > 0:
+        logger.info(f"did not started unit tests:")
+        for ss in serie_status_dict.get("dns_tests",[]):
+            logger.info(f"{ss}")
+    # failed test report
+    if len(serie_status_dict.get("failed_tests")) > 0:
+        logger.info(f"failed unit tests:")
+        for ss in serie_status_dict.get("failed_tests",[]):
+            logger.info(f"{ss}")
     # resoring the original signal handlers
     # signal.signal(signal.SIGCHLD, old_alarm_handler)
     # signal.signal(signal.SIGUSR1, old_sigusr1_handler)

@@ -4,14 +4,16 @@ globals:
   # hostname: generic     # if ommited, hostname from OS is taken
 
   db: 
-    file: results/results-v9.db     # path for sqlite db file (result store). if it starts with '/', path is absolute, otherwise relative to current working dir (os.getcwd()).
+    file: results/results-tests-celeron-cg.db     # path for sqlite db file (result store). if it starts with '/', path is absolute, otherwise relative to current working dir (os.getcwd()).
     name: expe                      # name of the table to store results
+
+  finder_db: results/tsbad-mem-min-db-v2.csv
 
   # (optional) it is not mandatory to set those paths!
   # temp_dir: temp/   # (optional) dir to store temp data: runner.pid, temp config, temp results files. default value: os.getcwd()/temp
 
 runner:
-  type: docker               # type of a runner. currently implemented: docker, systemd
+  type: systemd               # type of a runner. currently implemented: docker, systemd
   params:
     image: tsbad:0.0.5-cpu    # image for docker runner
     # name: dazzling_bassi    # (optional) name or short_id of the container to be reused, it will be removed at the end of test serie
@@ -20,10 +22,10 @@ runner:
   limits:
     # limit args. they will be adjusted to fulfill Runner requirements.
     # cpus: 1
-    memory : [ "750m", "1g", "2g" ]     # it stands for memory only limit
+    memory : [ 200m ]     # it stands for memory only limit
     swap : [ "0m" ]         # it stands for swap only limit
   timeout: 0
-
+  monitor: True      # if True, runner will try to monitor resource usage by Unit_pipeline
 ##### For single test #####
 # this section is added automatically. do not add it by hand!!!
 # unit_test:
@@ -39,9 +41,9 @@ dataset:
   # summary: /vol/FFL/datasets/TSB-AD-U/Summary.csv
   # name/index/group/re - keys to select datasets for testing. one of them has to be configured (may be all). 
   # name: 001_NAB_id_1_Facility_tr_1007_1st_2014
-  # datasets: small (~5k points), medium (~55k), large (~650k)
-  # index: [ 286, 331, 170 ]
-  index: [ 286, 331 ]
+  # datasets: small/294 (~5k points), medium/356 (~50k), large/224 (~100k)
+  # index: [ 224 ]
+  index: [ 294 ]
   # index: [ 9, 149, 169, 170, 285, 313, 330, 332, 336, 356, 387 ]
   # group: [ WSD, NAB ]
   # re: "filter: "^010_|^150_|^170_|^171_|^286_|^314_|^331_|^333_|^337_|^357_|^388_""
@@ -49,8 +51,8 @@ dataset:
 # TSAD method
 method:
   # methods selected for testing
-  # name: [ NORMA, Series2Graph, MCD, Sub_MCD ]
-  name: [ NORMA, Series2Graph, MCD, Sub_MCD ]
+  # name: [ NORMA, Series2Graph, MCD, Sub_MCD, PCA, Sub_HBOS, KNN, USAD, OmniAnomaly ]
+  name: [ MCD ]
     #  parameters: 
     #  slidingWindow: 1 
     #  n_neighbors: 30

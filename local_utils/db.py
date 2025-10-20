@@ -51,7 +51,7 @@ class SqliteWrapper:
         self._db = None
 
         self._check_config()
-        self._open_db()
+        # self._open_db()
 
     def _check_config(self):
         self._db_config.setdefault("file", defaults.DB_FILE)
@@ -66,20 +66,33 @@ class SqliteWrapper:
                 self._db = {}
                 self._db["connection"] = sqlite3.connect(self._db_config["file"])
                 self._db["cursor"] = self._db["connection"].cursor()
-                rows = ','.join(["{} {}".format(DB_RECORD[i][0],DB_RECORD[i][1]) for i in range(len(DB_RECORD))])
-                request = "CREATE TABLE IF NOT EXISTS {} ({})".format(self._db_config["name"],rows)
-                self._db["cursor"].execute(request)
-        except:
+        except Exception as e:
             # raise Exception("db has not been created")
             if self._logger is not None:
-                self._logger.warning("Error while opening database: results will not be stored in DB !!!")
+                self._logger.warning(f"Error while opening database: {repr(e)}")
             self._db = None
 
-    def save_results(self, config: dict, status: dict, results: dict):
+    def _create_table(self, table_name : str = None):
+        try:
+            # create table if requested
+            rows = ','.join(["{} {}".format(DB_RECORD[i][0],DB_RECORD[i][1]) for i in range(len(DB_RECORD))])
+            if table_name is None:
+                table_name = self._db_config["name"]
+            request = f"CREATE TABLE IF NOT EXISTS {table_name} ({rows})"
+            self._db["cursor"].execute(request)
+        except Exception as e:
+            # raise Exception("db has not been created")
+            if self._logger is not None:
+                self._logger.warning(f"Error while creating db table: {repr(e)}")
+
+    def save_results(self, run_id: str,  config: dict, status: dict, results: dict, table_name : str = None):
         # config - input config to the runner
         # status - data come from runner
         # results - data come from unit-test
+        if table_name is None:
+            table_name = self._db_config["name"]
         self._open_db()
+        self._create_table(table_name)
 
         try:
             columns = "({})".format(','.join(DB_RECORD[i][0] for i in range(len(DB_RECORD))))
@@ -88,7 +101,7 @@ class SqliteWrapper:
             limits = runner.get("limits", {})
 
             row = [
-                str(config["unit_test"].get("id")),
+                str(run_id),
                 time.strftime(defaults.TIME_FORMAT,time.localtime(status.get("st"))),
                 time.strftime(defaults.TIME_FORMAT,time.localtime(status.get("et"))),
                 runner.get("type", ""),
@@ -120,10 +133,63 @@ class SqliteWrapper:
                 json.dumps(results.get('score', []))
             ]
             values = '('+','.join(['?' for i in range(len(DB_RECORD))])+')'
-            request = "INSERT INTO {} {} VALUES {}".format(self._db_config["name"],columns,values)
+            request = f"INSERT INTO {table_name} {columns} VALUES {values}"
 
             self._db["cursor"].execute(request,row)
             self._db["connection"].commit()
 
-        except:
-            raise Exception("Impossible to save the results in database")
+        except Exception as e:
+            raise Exception(f"Error while saving results in database: {repr(e)}")
+    
+    def _get_tables(self):
+        self._open_db()
+        tables = [ t[0] for t in self._db["cursor"].execute("SELECT name FROM sqlite_master WHERE type='table';") ]
+        return tables
+    
+    def _get_table_columns(self, table_name : str = None):
+        if table_name is None:
+            table_name = self._db_config["name"]
+
+        try:
+            self._open_db()
+            self._db["cursor"].execute(f"PRAGMA table_info({table_name})")
+            columns = [ f[1] for f in self._db["cursor"].fetchall() ]
+        except Exception as e:
+            print(f"Exception in reading '{table_name}': ({str(e)}) ")
+
+        return columns
+    
+    def get_results(self, columns : list = None, table_name : str = None, where_clause : dict = None):
+        results = []
+        if table_name is None:
+            table_name = self._db_config["name"]
+        
+        try:
+            self._open_db()
+            table_columns = self._get_table_columns(table_name)
+            if type(columns) == list:
+                columns = [ i for i in columns if i in table_columns ]
+            else:
+                columns = table_columns
+
+            select_str = f"SELECT {','.join(columns)} FROM {table_name}"
+            if type(where_clause) == dict and len(where_clause) > 0:
+                where_str = " WHERE "
+                for i, k in enumerate(where_clause.keys()):
+                    if i != 0:
+                        where_str += " AND "
+                    where_str += f"{k}='{where_clause[k]}'"
+                select_str += where_str
+
+            print(select_str)
+            self._db["cursor"].execute(select_str)
+            rows = self._db["cursor"].fetchall()
+            for r in rows:
+                rec = {}
+                for i, v in enumerate(r):
+                    rec[columns[i]] = v
+                results.append(rec)
+        except Exception as e:
+            print(f"Error while retiving results: {repr(e)}")
+
+        return results

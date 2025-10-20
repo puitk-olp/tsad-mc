@@ -1,11 +1,14 @@
 import os
-# import sys
+import fcntl
 import yaml
 import json
 import pickle
 import pandas as pd
 import itertools
 import local_utils.defaults as defaults
+# import logging
+
+# logger = logging.getLogger("runner")
 
 def _get_ext(file_path: str) -> str:
     _, ext = os.path.splitext(file_path)
@@ -31,14 +34,17 @@ def read_file(input_file: str = defaults.CONFIG_FILE):
         raise IOError(f"Error while rerading '{input_file}' file")
     return data
 
-def write_file(data: dict|str, output_file: str):
+def write_file(data: dict|str, output_file: str, append: bool = False):
+    file = None
     try:
         # make dirs
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
         # choose proper file format writer
         ext = _get_ext(output_file).lower()
-        mode = "w" + _get_mode(ext)
+        mode = ("a" if append else "w") + _get_mode(ext)
         with open(output_file, mode) as file:
+            # Acquire exclusive lock on the file
+            fcntl.flock(file.fileno(), fcntl.LOCK_EX)
             if ext in [ "yaml", "yml" ]:
                 yaml.dump(data, file)
             elif ext == "json":
@@ -47,6 +53,10 @@ def write_file(data: dict|str, output_file: str):
                 pickle.dump(data, file)
             else:
                 file.write(str(data))
+            # immediate write to file
+            file.flush()
+            # Release the lock
+            fcntl.flock(file.fileno(), fcntl.LOCK_UN)
     except:
         raise IOError(f"Error during writing to '{output_file}' file")
 
@@ -57,22 +67,32 @@ def check_globals(config: dict):
     config["globals"].setdefault('hostname',os.uname().nodename)
     config["globals"].setdefault("temp_dir", f"{defaults.TEMP_DIR}")
 
-def examine_multi_config(multi_config: dict) -> list[dict]:
+def examine_multi_config(multi_config: dict, run_mode: str = "normal"): # -> list[dict]:
     # prepare config lists for permutations
     runner_config = multi_config.setdefault("runner", {})
     
-    # examine limits
-    limits = runner_config.setdefault("limits",{})
-    for l in [ "cpu", "memory", "swap" ]:
-        limits.setdefault(l,[None])
-        if type(limits[l])!=list:
-            limits[l] = [ limits[l] ]
+    # examine limits and timeouts
+    if run_mode=="finder":
+        # in "finder" mode, do not set timeout nor limits
+        timeout = [ 0 ]
+        limits = {
+            "cpu": [ None ],
+            "memory": [ None ],     # memory limit will be set by finder algorithm
+            "swap": [ "0m" ]
+        }
+    else:
+        # timeout
+        timeout = runner_config.setdefault("timeout", [0])
+        if type(timeout)!=list:
+            timeout = [ timeout ]
+        # limits
+        limits = runner_config.setdefault("limits",{})
+        for l in [ "cpu", "memory", "swap" ]:
+            limits.setdefault(l,[None])
+            if type(limits[l])!=list:
+                limits[l] = [ limits[l] ]
     
-    # examine timeouts
-    timeout = runner_config.setdefault("timeout", [0])
-    if type(timeout)!=list:
-        timeout = [ timeout ]
-    
+    # common for both modes
     # examine dataset
     ds_config = multi_config.setdefault("dataset", {})
     ds_config.setdefault("dir", defaults.DATASET_DIR)
@@ -102,8 +122,10 @@ def examine_multi_config(multi_config: dict) -> list[dict]:
 
     # permutations of: cpu, mem, memswap, timeout, dataset, method
     config_to_permute = [ limits["cpu"], limits["memory"], limits["swap"], timeout, ds_config["name"], m_config.get("name") ]
-    config_permutations = itertools.product(*config_to_permute)
+    config_permutations = list(itertools.product(*config_to_permute))
     unit_configs = []
+    no_failed_configs = 0
+    finder_db_df = None
 
     for cp in config_permutations:
         # print(f"examine config permutation: {cp}")
@@ -113,6 +135,7 @@ def examine_multi_config(multi_config: dict) -> list[dict]:
                 "type": runner_config.get("type"),
                 "params": runner_config.get("params"),
                 "timeout": cp[3],
+                "monitor": runner_config.get("monitor", False)
             },
             "dataset": {
                 "dir": ds_config.get("dir"),
@@ -127,10 +150,27 @@ def examine_multi_config(multi_config: dict) -> list[dict]:
             # print(f"examine limits: {l}")
             if l[1] not in ["None", None]:
                 c["runner"].setdefault("limits",{})[l[0]] = l[1]
-        
+
+        # examine "X" value for memory limit -> then get limit from finder db
+        if c["runner"]["limits"].get("memory",None)=="X":
+            finder_db_file = multi_config["globals"].get("finder_db")
+            if finder_db_df is None:
+                if os.path.isfile(finder_db_file):
+                    finder_db_df = pd.read_csv(finder_db_file, sep=";")
+            if finder_db_df is not None:
+                # logger.debug(f"m={cp[5]}, ds={cp[4]}, h={multi_config['globals'].get('hostname')}, rt={runner_config.get('type')}")
+                df_limit = finder_db_df.loc[finder_db_df.method.eq(cp[5]) & finder_db_df.dataset.eq(cp[4]) & finder_db_df.hostname.eq(multi_config['globals'].get('hostname')) & finder_db_df.runner_type.eq(runner_config.get("type"))]
+                mem_min = f"{df_limit['mem_min'].max()}m"
+                c["runner"]["limits"]["memory"] = mem_min
+            # if memory limit is still 'X' -> discard config
+            if c["runner"]["limits"].get("memory",None)=="X":
+                no_failed_configs += 1
+                continue            
+        # place unit config on the list
         unit_configs.append(c)
+        # yield (c, no_unit_configs)
     
-    return unit_configs
+    return unit_configs, no_failed_configs
 
 
 BYTE_UNITS = [ "b", "k", "m", "g", "t" ]
