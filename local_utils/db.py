@@ -1,5 +1,5 @@
 import os
-import sys
+# import sys
 import time
 import json
 import sqlite3
@@ -72,6 +72,12 @@ class SqliteWrapper:
                 self._logger.warning(f"Error while opening database: {repr(e)}")
             self._db = None
 
+    def _execute(self, request, values = ()):
+        self._open_db()
+        if self._logger is not None:
+            self._logger.debug(f"{request=}, {values=}")
+        return self._db["cursor"].execute(request, values)
+
     def _create_table(self, table_name : str = None):
         try:
             # create table if requested
@@ -79,7 +85,7 @@ class SqliteWrapper:
             if table_name is None:
                 table_name = self._db_config["name"]
             request = f"CREATE TABLE IF NOT EXISTS {table_name} ({rows})"
-            self._db["cursor"].execute(request)
+            self._execute(request)
         except Exception as e:
             # raise Exception("db has not been created")
             if self._logger is not None:
@@ -91,7 +97,7 @@ class SqliteWrapper:
         # results - data come from unit-test
         if table_name is None:
             table_name = self._db_config["name"]
-        self._open_db()
+
         self._create_table(table_name)
 
         try:
@@ -119,7 +125,7 @@ class SqliteWrapper:
                 status.get('expe_fail_reason', results.get('expe_fail_reason','')),
                 config["method"]["name"],
                 json.dumps(config["method"].get("parameters",{})),
-                json.dumps(config["metrics"]),
+                config.get("metrics") if type(config.get("metrics"))==str else json.dumps(config["metrics"]),
                 # json.dumps(self._config["metrics"].get("parameters",{})),
                 config["dataset"]["name"],
                 results.get('dataset_file_size', -1),
@@ -135,15 +141,14 @@ class SqliteWrapper:
             values = '('+','.join(['?' for i in range(len(DB_RECORD))])+')'
             request = f"INSERT INTO {table_name} {columns} VALUES {values}"
 
-            self._db["cursor"].execute(request,row)
+            self._execute(request,row)
             self._db["connection"].commit()
 
         except Exception as e:
             raise Exception(f"Error while saving results in database: {repr(e)}")
     
     def _get_tables(self):
-        self._open_db()
-        tables = [ t[0] for t in self._db["cursor"].execute("SELECT name FROM sqlite_master WHERE type='table';") ]
+        tables = [ t[0] for t in self._execute("SELECT name FROM sqlite_master WHERE type='table';") ]
         return tables
     
     def _get_table_columns(self, table_name : str = None):
@@ -151,11 +156,10 @@ class SqliteWrapper:
             table_name = self._db_config["name"]
 
         try:
-            self._open_db()
-            self._db["cursor"].execute(f"PRAGMA table_info({table_name})")
-            columns = [ f[1] for f in self._db["cursor"].fetchall() ]
+            columns = [ f[1] for f in self._execute(f"PRAGMA table_info({table_name})") ]
         except Exception as e:
-            print(f"Exception in reading '{table_name}': ({str(e)}) ")
+            if self._logger is not None:
+                self._logger.warning(f"Exception in reading '{table_name}': ({str(e)}) ")
 
         return columns
     
@@ -165,7 +169,6 @@ class SqliteWrapper:
             table_name = self._db_config["name"]
         
         try:
-            self._open_db()
             table_columns = self._get_table_columns(table_name)
             if type(columns) == list:
                 columns = [ i for i in columns if i in table_columns ]
@@ -173,23 +176,61 @@ class SqliteWrapper:
                 columns = table_columns
 
             select_str = f"SELECT {','.join(columns)} FROM {table_name}"
+            
             if type(where_clause) == dict and len(where_clause) > 0:
                 where_str = " WHERE "
+                values = []
                 for i, k in enumerate(where_clause.keys()):
                     if i != 0:
                         where_str += " AND "
-                    where_str += f"{k}='{where_clause[k]}'"
+                    where_str += f"{k}=?"
+                    values.append(where_clause[k])
                 select_str += where_str
 
-            print(select_str)
-            self._db["cursor"].execute(select_str)
-            rows = self._db["cursor"].fetchall()
+            rows = self._execute(select_str, values).fetchall()
             for r in rows:
                 rec = {}
                 for i, v in enumerate(r):
                     rec[columns[i]] = v
                 results.append(rec)
         except Exception as e:
-            print(f"Error while retiving results: {repr(e)}")
+            if self._logger is not None:
+                self._logger.warning(f"Error while retiving results: {repr(e)}")
 
         return results
+    
+    def update_result(self, data: dict = None, table_name : str = None, commit : bool = True):
+        try:
+            if table_name is None:
+                table_name = self._db_config["name"]
+            expe_id = data.get("expe_id")
+            if expe_id in [ None, ""]:
+                if self._logger is not None:
+                    self._logger.warning(f"No 'expe_id' in data to update")
+                raise KeyError(f"No 'expe_id' in data to update")
+            del data["expe_id"]
+            table_columns = self._get_table_columns(table_name)
+            for c in list(data.keys()):
+                if c not in table_columns:
+                    if self._logger is not None:
+                        self._logger.warning(f"removed: k={c}, v={data[c]}")
+                    del data[c]
+                    continue
+                if type(data[c]) in [ list, tuple, dict ]:
+                    data[c] = json.dumps(data[c])
+                
+            update_str = f"UPDATE {table_name} SET {(','.join([f'{k}=?' for k in data.keys()]))} WHERE expe_id=?"
+            values = list(data.values())
+            values.append(expe_id)
+            self._execute(update_str, values)
+            if commit:
+                self._db["connection"].commit()
+        except Exception as e:
+            if self._logger is not None:
+                self._logger.warning(f"Error while updating results: {repr(e)}")
+
+    def close(self, commit : bool = False):
+        if commit:
+            self._db["connection"].commit()    
+        self._db["connection"].close()
+        self._db = None

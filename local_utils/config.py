@@ -67,6 +67,19 @@ def check_globals(config: dict):
     config["globals"].setdefault('hostname',os.uname().nodename)
     config["globals"].setdefault("temp_dir", f"{defaults.TEMP_DIR}")
 
+def check_metrics_config(metrics_config : str|list, metrics_allowed : list = []):
+    # metrics_config = self._config.setdefault("metrics",defaults.METRICS_NAME)
+    if metrics_config == "all":
+        metrics_config = metrics_allowed
+    elif type(metrics_config)==str:
+        metrics_config = [] if metrics_config.lower() == "none" else [ metrics_allowed ]
+    elif type(metrics_config)!=list:
+        raise ValueError("Unknown definition of metrics")
+    for m in metrics_config:
+        if m not in metrics_allowed:
+            raise NotImplementedError("Unknown metric")
+    return metrics_config
+
 def examine_multi_config(multi_config: dict, run_mode: str = "normal"): # -> list[dict]:
     # prepare config lists for permutations
     runner_config = multi_config.setdefault("runner", {})

@@ -2,8 +2,8 @@ import numpy as np
 import math
 from TSB_AD.utils.slidingWindows import find_length_rank
 from local_utils.Timer import Timer
-from local_utils.Logger import Logger
-import traceback
+# from local_utils.Logger import Logger
+# import traceback
 
 Unsupervised = ['FFT', 'SR', 'NORMA', 'Series2Graph', 'Sub_IForest', 'IForest', 'LOF', 'Sub_LOF', 'POLY', 'MatrixProfile', 'Sub_PCA', 'PCA', 'HBOS', 
                         'Sub_HBOS', 'KNN', 'Sub_KNN','KMeansAD', 'KMeansAD_U', 'KShapeAD', 'COPOD', 'CBLOF', 'COF', 'EIF', 'RobustPCA', 'Lag_Llama', 'TimesFM', 'Chronos', 'MOMENT_ZS']
@@ -33,7 +33,7 @@ def run_Unsupervise_AD(model_name, data, **kwargs):
     # Reinitialize the timers
     Timer.timers = {}
 
-    status = 'failed'
+    status           : str = 'failed'
     expe_fail_reason : str = ""
     INIT_FAILED = False
     TEST_FAILED = False
@@ -50,13 +50,14 @@ def run_Unsupervise_AD(model_name, data, **kwargs):
             clf = init_function_to_call(data, **kwargs)
     except KeyError:
         error_message = f"Model function '{model_name}' is not defined."
-        print(error_message)
-        return error_message
+        # print(error_message)
+        # return error_message
+        raise NotImplementedError(error_message)
     except Exception as e:
         INIT_FAILED = True
         TEST_FAILED = True
         expe_fail_reason = repr(e)
-        print(traceback.format_exc())
+        # print(traceback.format_exc())
     
     # Test
     try:
@@ -86,7 +87,9 @@ def run_Semisupervise_AD(model_name, data_train, data_test, **kwargs):
     # Reinitialize the timers
     Timer.timers = {}
 
-    status       = 'success'
+    status           : str = 'failed'
+    expe_fail_reason : str = ""
+
     INIT_FAILED  = False
     TRAIN_FAILED = False
     TEST_FAILED  = False
@@ -105,13 +108,15 @@ def run_Semisupervise_AD(model_name, data_train, data_test, **kwargs):
             clf = init_function_to_call(data_train, data_test,**kwargs)
     except KeyError:
         error_message = f"Model function '{model_name}' is not defined."
-        print(error_message)
-        return error_message
+        # print(error_message)
+        # return error_message
+        raise NotImplementedError(error_message)
     except Exception as e:
         INIT_FAILED     = True
         TRAIN_FAILED = True
         TEST_FAILED     = True
-        status = 'failed'
+        # status = 'failed'
+        expe_fail_reason = repr(e)
 
     # Training
     try:
@@ -120,15 +125,18 @@ def run_Semisupervise_AD(model_name, data_train, data_test, **kwargs):
     except Exception as e:
         TRAIN_FAILED = True
         TEST_FAILED     = True
-        status = 'failed'
+        # status = 'failed'
+        expe_fail_reason = repr(e)
     
     # Test
     try:
         with Timer("test"):
             score = eval_function_to_call(clf, data_train, data_test)
+        status = "success"
     except Exception as e:
         TEST_FAILED = True
-        status = 'failed'
+        # status = 'failed'
+        expe_fail_reason = repr(e)
     
     # results formating
     result = {
@@ -138,13 +146,13 @@ def run_Semisupervise_AD(model_name, data_train, data_test, **kwargs):
         "no_train_points": data_train.shape[0],
         "no_test_points": data_test.shape[0],
         'score' : score,
-        'expe_status': status
+        'expe_status': status,
+        'expe_fail_reason': expe_fail_reason,
     }
     
     return result
 
 ## FFT
-
 def run_FFT_init(data,**parameters): 
     from TSB_AD.models.FFT import FFT
     ifft_parameters               = int(parameters.get('ifft_parameters',5))
@@ -161,8 +169,6 @@ def run_FFT_eval(clf,data):
     return(clf.decision_scores_.ravel())
 
 ## Sub_IForest
-
-
 def run_Sub_IForest_init(data, **parameters):
     from TSB_AD.models.IForest import IForest
     periodicity     = int(parameters.get('periodicity',1))
@@ -179,7 +185,6 @@ def run_Sub_IForest_eval(clf,data):
     return(clf.decision_scores_.ravel())
 
 ## IForest
-
 def run_IForest_init(data, **parameters):
     from TSB_AD.models.IForest import IForest
     slidingWindow  =  int(parameters.get('slidingWindow',100))
@@ -194,7 +199,6 @@ def run_IForest_eval(clf,data):
     return(clf.decision_scores_.ravel())
 
 ## Sub_LOF
-
 def run_Sub_LOF_init(data, **parameters):
     from TSB_AD.models.LOF import LOF
     periodicity    =  int(parameters.get('periodicity',1))
@@ -211,7 +215,6 @@ def run_Sub_LOF_eval(clf,data):
     return(clf.decision_scores_.ravel())
 
 ## LOF
-
 def run_LOF_init(data, **parameters):
     from TSB_AD.models.LOF import LOF
     slidingWindow    =  int(parameters.get('slidingWindow',1))
@@ -227,8 +230,7 @@ def run_LOF_eval(clf,data):
     clf.fit(data)
     return(clf.decision_scores_.ravel())
 
-##POLY
-
+## POLY
 def run_POLY_init(data, **parameters):
     from TSB_AD.models.POLY import POLY
     periodicity  = int(parameters.get('periodicity',1))
@@ -244,7 +246,6 @@ def run_POLY_eval(clf,data):
     return(clf.decision_scores_.ravel())
 
 ## MatrixProfile
-
 def run_MatrixProfile_init(data, **parameters):
     from TSB_AD.models.MatrixProfile import MatrixProfile
     periodicity  = int(parameters.get('periodicity',1))
@@ -260,7 +261,6 @@ def run_MatrixProfile_eval(clf,data):
     return(clf.decision_scores_.ravel())
 
 ## Left_STAMPi
-
 def run_Left_STAMPi_init(data_train, data_test,**parameters):
     from TSB_AD.models.Left_STAMPi import Left_STAMPi
     window_size = int(parameters.get('window_size',100))
@@ -275,7 +275,6 @@ def run_Left_STAMPi_eval(clf,data_train, data_test):
     return clf.decision_function(data_test).ravel()
 
 ## SAND
-
 def run_SAND_init(data_train, data_test, **parameters):
     from TSB_AD.models.SAND import SAND 
     periodicity  = int(parameters.get('periodicity',1))
@@ -292,7 +291,6 @@ def run_SAND_eval(clf,data_train, data_test):
     return clf.decision_scores_.ravel()
 
 ## KShapeAD
-
 def run_KShapeAD_init(data, **parameters):
     from TSB_AD.models.SAND import SAND
     periodicity  =int(parameters.get('periodicity',1))
@@ -306,7 +304,6 @@ def run_KShapeAD_eval(clf,data):
     return(clf['model'].decision_scores_.ravel())
 
 ## Series2Graph
-
 def run_Series2Graph_init(data, **parameters):
     from TSB_AD.models.Series2Graph import Series2Graph
     periodicity  = int(parameters.get('periodicity',1))
@@ -327,7 +324,6 @@ def run_Series2Graph_eval(clf,data):
     return score.ravel()
 
 ## Sub_PCA
-
 def run_Sub_PCA_init(data, **parameters):
     from TSB_AD.models.PCA import PCA
     periodicity  = int(parameters.get('periodicity',1))
@@ -345,7 +341,6 @@ def run_Sub_PCA_eval(clf,data):
     return(clf.decision_scores_.ravel())
 
 ## PCA
-
 def run_PCA_init(data, **parameters):
     from TSB_AD.models.PCA import PCA
     slidingWindow  = int(parameters.get('slidingWindow',100))
@@ -362,7 +357,6 @@ def run_PCA_eval(clf,data):
     return(clf.decision_scores_.ravel())
 
 ## NORMA
-
 def run_NORMA_init(data, **parameters):
     from TSB_AD.models.NormA import NORMA
     periodicity   = int(parameters.get('periodicity',1))
@@ -383,7 +377,6 @@ def run_NORMA_eval(clf,data):
     return score.ravel()
 
 ## Sub_HBOS
-
 def run_Sub_HBOS_init(data, **parameters):
     from TSB_AD.models.HBOS import HBOS
     periodicity  = int(parameters.get('periodicity',1))
@@ -400,7 +393,6 @@ def run_Sub_HBOS_eval(clf,data):
     return(clf.decision_scores_.ravel())
 
 ## HBOS
-
 def run_HBOS_init(data, **parameters):
     from TSB_AD.models.HBOS import HBOS
     slidingWindow  = int(parameters.get('slidingWindow',1))
@@ -417,7 +409,6 @@ def run_HBOS_eval(clf,data):
 
 
 ## Sub_OCSVM
-
 def run_Sub_OCSVM_init(data_train, data_test, **parameters):
     from TSB_AD.models.OCSVM import OCSVM
     kernel      =   str(parameters.get('kernel','rbf'))
@@ -437,7 +428,6 @@ def run_Sub_OCSVM_eval(clf,data_train, data_test):
     return clf.decision_function(data_test).ravel()
 
 ## OCSVM
-
 def run_OCSVM_init(data_train, data_test, **parameters):
     from TSB_AD.models.OCSVM import OCSVM
     kernel        =   str(parameters.get('kernel','rbf'))
@@ -457,7 +447,6 @@ def run_OCSVM_eval(clf,data_train, data_test):
 
  
 ## Sub_MCD
-
 def run_Sub_MCD_init(data_train, data_test, **parameters):
     from TSB_AD.models.MCD import MCD
     support_fraction  = float(parameters.get('support_fraction',-1))
@@ -479,7 +468,6 @@ def run_Sub_MCD_eval(clf,data_train, data_test):
     return clf.decision_function(data_test).ravel()
 
 ## Sub_MCD
-
 def run_MCD_init(data_train, data_test, **parameters):
     from TSB_AD.models.MCD import MCD
     support_fraction  =  float(parameters.get('support_fraction',-1))
@@ -499,7 +487,6 @@ def run_MCD_eval(clf,data_train, data_test):
     return clf.decision_function(data_test).ravel()
 
 ## Sub_KNN
-
 def run_Sub_KNN_init(data,**parameters):
     from TSB_AD.models.KNN import KNN
     n_neighbors  = int(parameters.get('n_neighbors',10))
@@ -517,7 +504,6 @@ def run_Sub_KNN_eval(clf,data):
     return(clf.decision_scores_.ravel())
 
 ## KNN 
-
 def run_KNN_init(data, **parameters):
     from TSB_AD.models.KNN import KNN
     slidingWindow  = int(parameters.get('slidingWindow',1))
@@ -533,7 +519,6 @@ def run_KNN_eval(clf,data):
     return(clf.decision_scores_.ravel())
 
 ## KMeansAD
-
 def run_KMeansAD_init(data, **parameters):
     from TSB_AD.models.KMeansAD import KMeansAD
     n_clusters     = int(parameters.get('n_clusters',20))
@@ -547,7 +532,6 @@ def run_KMeansAD_eval(clf,data):
     return(clf.fit_predict(data).ravel())
 
 ## KMeansAD_U
-
 def run_KMeansAD_U_init(data, **parameters):
     from TSB_AD.models.KMeansAD import KMeansAD
     n_clusters  = int(parameters.get('n_clusters',20))
