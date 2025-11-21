@@ -44,7 +44,7 @@ class SerieStatus:
             record = {
                 "method": config["method"].get("name"),
                 "dataset": config["dataset"].get("name"),
-                "hostname": os.uname().nodename,
+                "hostname": config["globals"].get("hostname"),
                 "runner_type": config["runner"].get("type"),
                 "mem_limit": config["runner"]["limits"].get("memory")
             }
@@ -57,7 +57,7 @@ class SerieStatus:
             "n_loops": n_loops,
             "method": config["method"].get("name"),
             "dataset": config["dataset"].get("name"),
-            "limits": config["runner"].get("limits")
+            "limits": config["runner"].get("limits").copy()
         }
         self._dns_tests.append(record)
         self._write_to_file()

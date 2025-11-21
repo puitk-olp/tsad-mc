@@ -74,8 +74,8 @@ class SqliteWrapper:
 
     def _execute(self, request, values = ()):
         self._open_db()
-        if self._logger is not None:
-            self._logger.debug(f"{request=}, {values=}")
+        # if self._logger is not None:
+        #     self._logger.debug(f"{request=}, {values=}")
         return self._db["cursor"].execute(request, values)
 
     def _create_table(self, table_name : str = None):

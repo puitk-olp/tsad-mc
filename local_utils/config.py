@@ -67,6 +67,14 @@ def check_globals(config: dict):
     config["globals"].setdefault('hostname',os.uname().nodename)
     config["globals"].setdefault("temp_dir", f"{defaults.TEMP_DIR}")
 
+def check_run_mode(config: dict):
+    config.setdefault("run_mode", {})
+    config["run_mode"].setdefault('name', defaults.RUN_MODE)
+    config["run_mode"].setdefault('dns', defaults.DNS_FAILED)
+    config["run_mode"].setdefault('nloops', defaults.NLOOPS)
+    config["run_mode"].setdefault("mem_inc_step", defaults.MEM_INC_STEP)
+    config["run_mode"].setdefault("max_inc_steps", defaults.MAX_INC_STEPS)
+
 def check_metrics_config(metrics_config : str|list, metrics_allowed : list = []):
     # metrics_config = self._config.setdefault("metrics",defaults.METRICS_NAME)
     if metrics_config == "all":
@@ -165,7 +173,7 @@ def examine_multi_config(multi_config: dict, run_mode: str = "normal"): # -> lis
                 c["runner"].setdefault("limits",{})[l[0]] = l[1]
 
         # examine "X" value for memory limit -> then get limit from finder db
-        if c["runner"]["limits"].get("memory",None)=="X":
+        if run_mode in ["normal","tester"] and c["runner"]["limits"].get("memory",None)=="X":
             finder_db_file = multi_config["globals"].get("finder_db")
             if finder_db_df is None:
                 if os.path.isfile(finder_db_file):
@@ -207,7 +215,7 @@ def bytes2hr(value: int) -> str:
         if i < len(BYTE_UNITS)-1 and value > 1024**(i+1):
             continue
         value /= 1024**i
-        return f"{value:g}"+(BYTE_UNITS[i] if i > 0 else "")
+        return f"{value}"+(BYTE_UNITS[i] if i > 0 else "")
 
 
 

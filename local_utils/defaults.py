@@ -28,6 +28,13 @@ DOCKER_IMAGE="tsbad:0.0.5-cpu"
 TEMP_CONFIG_FILE=f"{TEMP_DIR}/{CONFIG_FILE}"
 RUNNER_PID_FILE=f"{TEMP_DIR}/runner.pid"
 
+### run mode params
+RUN_MODE="tester"
+DNS_FAILED=False
+NLOOPS=10
+MEM_INC_STEP="1m"
+MAX_INC_STEPS=20
+
 
 # METRICS_CMD=["python3",f"{WORKING_DIR}/metrics.py","--config",f"{TEMP_CONFIG_FILE}"]
 

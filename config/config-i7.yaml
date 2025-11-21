@@ -1,0 +1,79 @@
+globals:
+  comment: "nloops"
+  # user: pablo           # if ommited, username from OS is taken
+  # hostname: generic     # if ommited, hostname from OS is taken
+
+  db: 
+    file: results/results-nloops-i7-docker-2.db     # path for sqlite db file (result store). if it starts with '/', path is absolute, otherwise relative to current working dir (os.getcwd()).
+    name: expe                      # name of the table to store results
+
+  finder_db: results/tsbad-mem-min-db-v2.csv
+
+  # (optional) it is not mandatory to set those paths!
+  # temp_dir: temp/   # (optional) dir to store temp data: runner.pid, temp config, temp results files. default value: os.getcwd()/temp
+
+run_mode:                 # whole section for run-mode config
+  name: finder2       # replacement for --run-mode from cmdline args
+  dns: True           # do not start next unit run when previous failed (in tester/normal) mode
+  nloops: 10          # how many tests in a row we expect to be success
+  mem_inc_step: 1m    # (in walker mode) value by the which we increase memory limit
+  max_inc_steps: 10   # maximum number of steps walker will perform before giving up.
+
+runner:
+  type: docker               # type of a runner. currently implemented: docker, systemd
+  params:
+    image: tsbad:0.0.5-cpu    # image for docker runner
+    # name: dazzling_bassi    # (optional) name or short_id of the container to be reused, it will be removed at the end of test serie
+    # command:                # (optional) command to be run in a runner
+    # auto_remove: False
+  limits:
+    # limit args. they will be adjusted to fulfill Runner requirements.
+    # cpus: 1
+    memory : [ X ]     # it stands for memory only limit
+    swap : [ "0m" ]         # it stands for swap only limit
+  timeout: 0
+  # monitor: False      # if True, runner will try to monitor resource usage by Unit_pipeline
+
+##### For single test #####
+# this section is added automatically. do not add it by hand!!!
+# unit_test:
+#   id: 000-000-000-000
+#   result_file: results/000-000-000-000.yaml
+#   # save_config: True
+
+# dataset
+dataset:
+  # (optional) dir where datasets are stored. default value: /vol/FFL/datasets/TSB-AD-U
+  # dir: /vol/FFL/datasets/TSB-AD-U
+  # (optional): summary file used for dataset filtering. default value: /vol/FFL/datasets/TSB-AD-U/Summary.csv
+  # summary: /vol/FFL/datasets/TSB-AD-U/Summary.csv
+  # name/index/group/re - keys to select datasets for testing. one of them has to be configured (may be all). 
+  # name: 001_NAB_id_1_Facility_tr_1007_1st_2014
+  # datasets: small/294 (~5k points), medium/356 (~50k), large/224 (~100k)
+  # index: [ 294, 356, 224 ]
+  index: [ 294, 356, 224 ]
+  # index: [ 9, 149, 169, 170, 285, 313, 330, 332, 336, 356, 387 ]
+  # group: [ WSD, NAB ]
+  # re: "filter: "^010_|^150_|^170_|^171_|^286_|^314_|^331_|^333_|^337_|^357_|^388_""
+
+# TSAD method
+method:
+  # my methods selected for testing
+  # name: [ NORMA, Series2Graph, MCD, Sub_MCD, PCA, Sub_HBOS, KNN, USAD, OmniAnomaly ]
+  # others methods
+  # name: [ FFT, SR, Sub_IForest, IForest, LOF, Sub_LOF, POLY MatrixProfile, Sub_PCA, Sub_KNN, KMeansAD, KMeansAD_U, KShapeAD, COPOD, COF, EIF, RobustPCA, Left_STAMPi, SAND, OCSVM, Sub_OCSVM, AutoEncoder, CNN, LSTMAD, TranAD, TimesNet, FITS, Donut ]
+  name: [ NORMA ]
+  # name: [ FFT, SR, NORMA, Series2Graph, Sub_IForest, IForest, LOF, Sub_LOF, POLY, MatrixProfile, Sub_PCA, PCA, Sub_HBOS, KNN, Sub_KNN, KMeansAD, KMeansAD_U, KShapeAD, COPOD, EIF, RobustPCA, SAND, MCD, Sub_MCD, OCSVM, Sub_OCSVM, AutoEncoder, CNN, LSTMAD, TranAD, USAD, OmniAnomaly, FITS, Donut ]
+      #  parameters: 
+    #  slidingWindow: 1 
+    #  n_neighbors: 30
+    #  metric:  minkowski 
+    #  n_jobs:  1
+
+# metrics used for test. possible values: 'all', 'AUC-PR','AUC-ROC','VUS-PR','VUS-ROC','Standard-F1','PA-F1','Event-based-F1','R-based-F1','Affiliation-F'
+# + special value: none -> do not calculate metrics at all, store only 'score'
+metrics: none
+# [ 'Standard-F1', 'AUC-PR' ]
+  # PP: I drop metrics name and params, as it is not possible to pass params, so only keeping names straight under "metrics" key
+  # name: all
+  # parameters: ''
