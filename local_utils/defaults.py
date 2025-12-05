@@ -1,7 +1,8 @@
 import os
 
-BASE_DIR="/vol/FFL"
-WORKING_DIR=f"{os.getcwd()}"
+# BASE_DIR="/vol/FFL"
+# WORKING_DIR=f"{os.getcwd()}"
+WORKING_DIR=f"."
 CONFIG_FILE="config.yaml"
 LOG_CONFIG_FILE=f"log.yaml"
 
@@ -10,9 +11,6 @@ RESULT_DIR=f"{WORKING_DIR}/results"
 
 DATASET_DIR="/vol/FFL/datasets/TSB-AD-U"
 DATASET_SUMMARY_FILE=f"{DATASET_DIR}/Summary.csv"
-DATASET_NAME="001_NAB_id_1_Facility_tr_1007_1st_2014"
-
-METHOD="FFT"
 
 COMMENT=""
 
@@ -23,10 +21,9 @@ TIME_FORMAT="%Y-%m-%d %H:%M:%S %Z"
 
 METRICS_NAME="all"
 
-RUNNER_TYPE="docker"
-DOCKER_IMAGE="tsbad:0.0.5-cpu"
+RUNNER_TYPE="systemd"
+# DOCKER_IMAGE="tsbad:0.0.5-cpu"
 TEMP_CONFIG_FILE=f"{TEMP_DIR}/{CONFIG_FILE}"
-RUNNER_PID_FILE=f"{TEMP_DIR}/runner.pid"
 
 ### run mode params
 RUN_MODE="tester"

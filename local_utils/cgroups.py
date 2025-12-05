@@ -66,13 +66,15 @@ class CGroupsMonitor:
 
     def _reset_values(self):
         self._monitoring['data'] = {}
-        for r in self._act_resources:
-           self._monitoring['data'][r] = [] 
+        logger.debug(f"act-resources: {self._act_resources}")
+        if self._act_resources is not None:
+            for r in self._act_resources:
+                self._monitoring['data'][r] = [] 
 
     def get_values(self, mode : str = "max", reset: bool = True):
         r_values = {}
         for r, d in self._monitoring['data'].items():
-            r_values[r] = max(d)        # we assume mode=="max"
+            r_values[r] = max(d) if len(d)>0 else None       # we assume mode=="max"
         logger.debug(f"cgroups.get_values: {r_values}")
         if reset:
             self._reset_values()
@@ -95,7 +97,7 @@ class CGroupsMonitor:
                     self._monitoring['data'][r].append( max(r_list) )
                 time.sleep(self._monitoring['interval'])
         except IOError as e:
-            print(f"no process to monitor - probably ended: {e}")
+            logger.debug(f"no process to monitor - probably ended: {e}")
         finally:
             self._monitoring["alive"] = False
             self._monitoring["thread"] = None

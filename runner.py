@@ -78,20 +78,42 @@ class DockerRunner(Runner):
             except docker.errors.APIError:
                 logger.error(f"docker API error")
 
+
+        # create a new container
         if self._container is None:
+            # check if docker image is configured and present
+            if self._params.get("image") is None:
+                raise ValueError(f"no docker image provided")
+            try:
+                _ = self._client.images.get(self._params.get("image"))
+            except docker.errors.ImageNotFound as e:
+                logger.error(f'docker image: {self._params.get("image")} not found')
+                raise e
+            except docker.errors.APIError as e:
+                logger.error(f"docker API error")
+                raise e
+
+            # need to rethink volumes: host->container
+            # SCRIPT_DIR -> /app (?)
+            # dataset_dir -> dataset_dir
+            dataset_dir = read_file(config_file).get("dataset",{}).get("dir")
             # no container, create one
             run_args = {
-                "detach": True,
                 "volumes": {
-                    defaults.BASE_DIR: {
-                        "bind": defaults.BASE_DIR,
+                    SCRIPT_DIR: {
+                        "bind": SCRIPT_DIR,
                         "mode": "rw"
-                    } 
+                    },
+                    dataset_dir: {
+                        "bind": dataset_dir,
+                        "mode": "ro"
+                    }
                 },
-                "working_dir": defaults.WORKING_DIR,
+                "working_dir": SCRIPT_DIR,
+                "detach": True,
                 "auto_remove": True,        # as we want to use different commands (config_file) for every unit test
             }
-            self._params.setdefault("image", defaults.DOCKER_IMAGE)
+            # self._params.setdefault("image", defaults.DOCKER_IMAGE)
 
             if "name" in self._params:
                 del self._params["name"]
@@ -591,7 +613,8 @@ if __name__ == '__main__':
                     status = run(config=rolling_config, clean=False )
                     # logger.info(f"unit test status: {status}")
                     serie_status.report_test(status, rolling_config)
-                    l_mem_usage = status.get("monitoring_data").get("memory.current") / 1024**2
+                    l_mem_usage = status.get("monitoring_data").get("memory.current")
+                    l_mem_usage = l_mem_usage / 1024**2 if l_mem_usage is not None else None
                     max_memory_usage.append(l_mem_usage)
                     logger.info(f'finder2 (config: {c_idx+1}/{len_multi_config}): iteration {l_idx+1}/{temp_run_mode.get("nloops")}: {status.get("expe_status")}, max_mem_usage={l_mem_usage}m')
                 

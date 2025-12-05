@@ -35,6 +35,19 @@ We run it manually:
   (tsbad) tsad-mc/ $ python3 runner.py --config-file <runner-config-file.yaml>
   ```
 
+### How do `runner.py` and `Unit_pipeline.py` scripts interact?
+
+The `runner.py` script is responsible for instantiation of `Unit_Pipeline.py` script - it can be done through `systemd` or `docker`. They interact in the following way:
+
+- `runner.py` generates unit config and writes it to a file,
+- `Unit_Pipeline.py` script is launched and it reads unit config file generated earlier,
+- `Unit_Pipeline.py` performs computation and stores result in result file,
+- `runner.py` waits for launched script to finish, reads result file and processes it.
+
+*Note: Both scripts need to have access to the same place where config and result files are stored. For `systemd` it is usually not a problem, but for `docker`, bind mounts are required, as container runtime is isolated from `runner.py` one. Please, refer to [following section](#optional-build-docker-image) for details!*
+ 
+
+
 ### Config file structure for `runner.py` script
 
 The structure of the config file consists of several sections:
@@ -200,6 +213,9 @@ Necessary, if you'll be running `Unit_Pipeline.py` script via `docker` container
 ```
 By default, our image is built from `python:3.12-slim` image. If required, this can be adjusted in very first line of [Dockerfile](docker/Dockerfile). \
 *Note: Edit it only if you know what you do!*
+
+***Important!*** \
+The Docker image built here is an environment only image. It means that it does not contain either our app source code nor datasets. Those have to be mounted as volumes during docker container run. When using `runner.py` script, it will be done automatically, otherwise an user has to take care of mounting.
 
 
 Verify if the docker image is present in the system:

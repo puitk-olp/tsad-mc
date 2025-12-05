@@ -56,12 +56,10 @@ class Unit_Pipeline:
         self._check_metrics_config()  
         
     def _check_dataset_config(self):
-            if self._config.get('dataset', None) is None:
-                logger.warn("missing dataset config. using default one.")
-                self._config["dataset"] = {}
-            
-            self._config["dataset"].setdefault('dir', defaults.DATASET_DIR)
-            self._config["dataset"].setdefault('name', defaults.DATASET_NAME)
+            if self._config.get('dataset') is None or self._config["dataset"].get('dir') is None or self._config["dataset"].get('name') is None:
+                raise KeyError(f"dataset config mismatch")
+            if not os.path.isdir(self._config["dataset"].get('dir')) or not os.path.isfile(f'{self._config["dataset"].get("dir")}/{self._config["dataset"].get("name")}.csv'):
+                raise FileNotFoundError("dataset dir or file not found")
 
     def _check_method_config(self):
         method = self._config.setdefault("method",{})
@@ -111,47 +109,32 @@ class Unit_Pipeline:
 
 
     def run(self):
-        try:
-            # i throw away subprocess and call methods directly
-            # result = subprocess.run(command, capture_output=True, text=True)
-            method = self._config["method"]
-            data, labels, train_index = self._get_dataset()
-            
-            if method.get("name") in Unsupervised:
-                logger.debug(f'launching unsupervised method: {method.get("name")}')
-                result = run_Unsupervise_AD(method.get("name"), data, **method.get("parameters",{}))
-            else:
-                train_data = data[0:train_index]
-                test_data  = data[train_index:-1]
-                labels = labels[train_index:-1]
-                logger.debug(f'launching semisupervised method: {method.get("name")}, train index: {train_index}')
-                result = run_Semisupervise_AD(method.get("name"), train_data, test_data, **method.get("parameters",{}))
+        # i throw away subprocess and call methods directly
+        # result = subprocess.run(command, capture_output=True, text=True)
+        method = self._config["method"]
+        data, labels, train_index = self._get_dataset()
+        
+        if method.get("name") in Unsupervised:
+            logger.debug(f'launching unsupervised method: {method.get("name")}')
+            result = run_Unsupervise_AD(method.get("name"), data, **method.get("parameters",{}))
+        else:
+            train_data = data[0:train_index]
+            test_data  = data[train_index:-1]
+            labels = labels[train_index:-1]
+            logger.debug(f'launching semisupervised method: {method.get("name")}, train index: {train_index}')
+            result = run_Semisupervise_AD(method.get("name"), train_data, test_data, **method.get("parameters",{}))
 
-            logger.debug(f"scalling the score")
-            score = MinMaxScaler(feature_range=(0,1)).fit_transform(result['score'].reshape(-1,1)).ravel()
+        logger.debug(f"scalling the score")
+        score = MinMaxScaler(feature_range=(0,1)).fit_transform(result['score'].reshape(-1,1)).ravel()
 
-            if len(self._config["metrics"]) > 0:
-                # get only metrics that are required, if any
-                logger.debug(f'getting metrics: {self._config["metrics"]}')
-                result["perf"] = get_metrics(result['score'], labels, self._config["metrics"])
-            result["score"] = score.tolist()
-            result["dataset_memory_size"] = sys.getsizeof(data) + sys.getsizeof(labels)
+        if len(self._config["metrics"]) > 0:
+            # get only metrics that are required, if any
+            logger.debug(f'getting metrics: {self._config["metrics"]}')
+            result["perf"] = get_metrics(result['score'], labels, self._config["metrics"])
+        result["score"] = score.tolist()
+        result["dataset_memory_size"] = sys.getsizeof(data) + sys.getsizeof(labels)
 
-            # logger.debug(f"result size in memory: {sys.getsizeof(result)}")
-
-        except Exception as e:
-            # logger.warning(traceback.format_exc())
-            logger.warning("exception during main function exec")
-            logger.debug(traceback.format_exc())
-            result = {
-                    "expe_status": "failed",
-                    "expe_fail_reason": repr(e),
-                    "score": [],
-                    "init": float('NaN'),
-                    "train": float('NaN'),
-                    "test": float('NaN'),
-                    "perf": {}
-                }
+        # logger.debug(f"result size in memory: {sys.getsizeof(result)}")
 
         return result
 
@@ -173,6 +156,16 @@ if __name__ == '__main__':
     # parser.add_argument('-p','--pid-file', type=str, default=None)
     args = parser.parse_args()
 
+    results : dict = {
+        "expe_status": "failed",
+        "expe_fail_reason": "",
+        "score": [],
+        "init": float('NaN'),
+        "train": float('NaN'),
+        "test": float('NaN'),
+        "perf": {}
+    }
+
     try:
         log_config = read_file(input_file=args.log_config_file)
         logging.config.dictConfig(log_config)
@@ -180,20 +173,28 @@ if __name__ == '__main__':
         logger.debug(f"reading logging config: {args.log_config_file}")
     except Exception as e:
         logger.warning(f"could not process log config file: {repr(e)}")
-    
+
     try:
         logger.debug(f"reading configuration file: {args.config_file}")
         config = read_file(input_file=args.config_file)
-    except:
-        logger.critical(f"could not process main config file")
+        logger.info(f"initialization of Unit_Pipeline")
+        T = Unit_Pipeline(config=config)
+    except Exception as e:
+        logger.critical(f"error during initialization: {repr(e)}")
         exit_code = 1
+        results["expe_fail_reason"] = repr(e)
 
-    logger.info(f"initialization of Unit_Pipeline")
-
-    T = Unit_Pipeline(config=config)
-
-    logger.info(f"running main pipeline function: id={config['unit_test'].get('id')}")
-    results = T.run()
+    try:
+        if exit_code == 0:
+            # if all went well until now, run
+            logger.info(f"running main pipeline function: id={config['unit_test'].get('id')}")
+            results = T.run()
+    except Exception as e:
+        # logger.warning(traceback.format_exc())
+        logger.warning(f"exception during main function exec: {repr(e)}")
+        logger.debug(traceback.format_exc())
+        exit_code = 1
+        results["expe_fail_reason"] = repr(e)
 
     try:
         # save results
@@ -204,15 +205,7 @@ if __name__ == '__main__':
         logger.error(repr(e))
         exit_code = 1
 
-
     signal.signal(signal.SIGALRM, old_alarm_handler)
     logger.debug(f"process end: {time.time()}")
-
-    # if args.pid_file is not None and os.path.exists(args.pid_file):
-    #     pid = int(read_file(args.pid_file))
-
-    #     if psutil.pid_exists(pid):
-    #         logger.debug(f"sending SIGUSR1 signal to process: {pid}")
-    #         os.kill(pid, signal.SIGUSR1)
 
     sys.exit(exit_code)

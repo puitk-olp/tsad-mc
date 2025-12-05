@@ -4,10 +4,10 @@ globals:
   # hostname: generic     # if ommited, hostname from OS is taken
 
   db: 
-    file: results/results-nloops-i7-docker-2.db     # path for sqlite db file (result store). if it starts with '/', path is absolute, otherwise relative to current working dir (os.getcwd()).
+    file: results/results-nosum.db     # path for sqlite db file (result store). if it starts with '/', path is absolute, otherwise relative to current working dir (os.getcwd()).
     name: expe                      # name of the table to store results
 
-  finder_db: results/tsbad-mem-min-db-v2.csv
+  finder_db: results/tsbad-nosum.csv
 
   # (optional) it is not mandatory to set those paths!
   # temp_dir: temp/   # (optional) dir to store temp data: runner.pid, temp config, temp results files. default value: os.getcwd()/temp
@@ -35,19 +35,20 @@ runner:
 
 dataset:
   # (optional) dir where datasets are stored. default value: /vol/FFL/datasets/TSB-AD-U
-  # dir: /vol/FFL/datasets/TSB-AD-U
+  dir: /vol/FFL/datasets/TSB-AD-U
   # (optional): summary file used for dataset filtering. default value: /vol/FFL/datasets/TSB-AD-U/Summary.csv
   # summary: /vol/FFL/datasets/TSB-AD-U/Summary.csv
 
   # name/index/group/re - keys to select datasets for testing. one of them has to be configured (may be all). 
-  # name: 001_NAB_id_1_Facility_tr_1007_1st_2014
-  index: [ 294, 356, 224 ]
+  # name: '001_NAB_id_1_Facility_tr_1007_1st_2014'
+  # index: [ 294, 356, 224 ]
+  index: 294
   # group: [ WSD, NAB ]
-  # re: "filter: "^295_|^357_|^225_""
+  # re: 'filter: "^295_|^357_|^225_"'
 
 method:
   # name: [ FFT, SR, NORMA, Series2Graph, Sub_IForest, IForest, LOF, Sub_LOF, POLY, MatrixProfile, Sub_PCA, PCA, Sub_HBOS, KNN, Sub_KNN, KMeansAD, KMeansAD_U, KShapeAD, COPOD, EIF, RobustPCA, SAND, MCD, Sub_MCD, OCSVM, Sub_OCSVM, AutoEncoder, CNN, LSTMAD, TranAD, USAD, OmniAnomaly, FITS, Donut ]
-  name: [ NORMA ]
+  name: [ FFT ]
     #  parameters: 
     #  slidingWindow: 1 
     #  n_neighbors: 30
