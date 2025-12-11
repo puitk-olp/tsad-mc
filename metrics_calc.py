@@ -37,7 +37,8 @@ def examine_result_config(result_config: dict = None):
                     result_files.append(rf)
     return result_files
 
-def get_dataset_labels(dataset_name : str, dataset_dir : str = defaults.DATASET_DIR):
+# def get_dataset_labels(dataset_name : str, dataset_dir : str = defaults.DATASET_DIR):
+def get_dataset_labels(dataset_name : str, dataset_dir : str):
     ds_file_name = f'{dataset_dir}/{dataset_name}.csv'
     logger.debug(f"loading dataset from: {ds_file_name}")
     df = pd.read_csv(ds_file_name, sep=',')
@@ -77,7 +78,7 @@ if __name__ == "__main__":
     config['results'] = examine_result_config(config.get("results", {}))
     # dataset config
     config.setdefault('dataset', {})
-    config['dataset'].setdefault('dir',defaults.DATASET_DIR)
+    # config['dataset'].setdefault('dir',defaults.DATASET_DIR)
     # processes config
     logger.debug(f"Processed config ({len(config.get('results'))}):\n{yaml.dump(config)}")
 

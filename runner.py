@@ -32,10 +32,11 @@ class Runner:
     def __init__(self, runner_config: dict = None, config_file: str = None):
         global SCRIPT_DIR
 
-        self._params = runner_config.get("params",{})
-        self._limits = runner_config.get("limits", {})
+        self._params = runner_config.get("params") if runner_config.get("params") else {}
+        self._limits = runner_config.get("limits") if runner_config.get("limits") else {}
         self._timeout = float(runner_config.get("timeout", 0))
         self._monitoring = { "enabled": runner_config.get("monitor",False) }
+        logger.debug(f"params: {self._params}, limits: {self._limits}")
         self._params["command"] = defaults.get_unit_cmd(script_dir=SCRIPT_DIR, config_file=config_file)
 
     def _process_limits(self):

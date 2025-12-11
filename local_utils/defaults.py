@@ -9,8 +9,8 @@ LOG_CONFIG_FILE=f"log.yaml"
 TEMP_DIR=f"{WORKING_DIR}/temp"
 RESULT_DIR=f"{WORKING_DIR}/results"
 
-DATASET_DIR="/vol/FFL/datasets/TSB-AD-U"
-DATASET_SUMMARY_FILE=f"{DATASET_DIR}/Summary.csv"
+# DATASET_DIR="/vol/FFL/datasets/TSB-AD-U"
+# DATASET_SUMMARY_FILE=f"{DATASET_DIR}/Summary.csv"
 
 COMMENT=""
 
